@@ -1,0 +1,22 @@
+{
+  "name": "cloneblast",
+  "version": "0.1.0",
+  "description": "Browser-based 2D pixel-art deflect combat game",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "phaser": "^3.80.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5",
+    "vite": "^5.2.11"
+  },
+  "allowScripts": {
+    "esbuild@0.21.5": true
+  }
+}
