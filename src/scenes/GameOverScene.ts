@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { GAME_WIDTH, GAME_HEIGHT } from '../game/constants';
+import { GAME_WIDTH } from '../game/constants';
 import { HighScoreSystem } from '../systems/HighScoreSystem';
 import type { GameOverData } from '../game/types';
 
@@ -7,38 +7,52 @@ export class GameOverScene extends Phaser.Scene {
   constructor() { super('GameOverScene'); }
 
   create(data: GameOverData): void {
-    const score = data?.score ?? 0;
-    const mode  = data?.mode  ?? 'campaign';
+    const score   = data?.score   ?? 0;
+    const mode    = data?.mode    ?? 'campaign';
+    const victory = data?.victory ?? false;
 
     // Background
-    this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x08000f);
-    this.add.rectangle(GAME_WIDTH / 2, 4, GAME_WIDTH, 8, 0xff2222, 0.7);
+    const bgCol = victory ? 0x050a05 : 0x08000f;
+    const lineCol = victory ? 0xffdd00 : 0xff2222;
+    this.add.rectangle(GAME_WIDTH / 2, 540, GAME_WIDTH, 1080, bgCol);
+    this.add.rectangle(GAME_WIDTH / 2, 4, GAME_WIDTH, 8, lineCol, 0.7);
 
     // Title
-    this.add.text(GAME_WIDTH / 2, 220, 'GAME OVER', {
+    const titleText = victory ? '★  VICTORY  ★' : 'GAME OVER';
+    const titleCol  = victory ? '#ffdd00'       : '#ff2222';
+    const strokeCol = victory ? '#443300'       : '#330000';
+
+    this.add.text(GAME_WIDTH / 2, 200, titleText, {
       fontSize: '112px',
       fontFamily: '"Courier New", Courier, monospace',
-      color: '#ff2222',
-      stroke: '#330000',
+      color: titleCol,
+      stroke: strokeCol,
       strokeThickness: 8,
     }).setOrigin(0.5);
 
+    if (victory) {
+      this.add.text(GAME_WIDTH / 2, 340, 'All 7 stages cleared!', {
+        fontSize: '40px',
+        fontFamily: '"Courier New", Courier, monospace',
+        color: '#88ff88',
+      }).setOrigin(0.5);
+    }
+
     // Score
-    this.add.text(GAME_WIDTH / 2, 380, `SCORE:  ${score.toLocaleString()}`, {
+    this.add.text(GAME_WIDTH / 2, 420, `SCORE:  ${score.toLocaleString()}`, {
       fontSize: '58px',
       fontFamily: '"Courier New", Courier, monospace',
       color: '#ffffff',
     }).setOrigin(0.5);
 
-    this.add.text(GAME_WIDTH / 2, 460, `MODE: ${mode.toUpperCase()}`, {
+    this.add.text(GAME_WIDTH / 2, 500, `MODE: ${mode.toUpperCase()}`, {
       fontSize: '32px',
       fontFamily: '"Courier New", Courier, monospace',
       color: '#556688',
     }).setOrigin(0.5);
 
     if (HighScoreSystem.isTopThree(score)) {
-      // Flash "NEW HIGH SCORE" then auto-proceed to name entry
-      const flash = this.add.text(GAME_WIDTH / 2, 570, '✦  NEW HIGH SCORE  ✦', {
+      const flash = this.add.text(GAME_WIDTH / 2, 590, '✦  NEW HIGH SCORE  ✦', {
         fontSize: '52px',
         fontFamily: '"Courier New", Courier, monospace',
         color: '#ffdd00',
@@ -54,7 +68,7 @@ export class GameOverScene extends Phaser.Scene {
         repeat: -1,
       });
 
-      this.add.text(GAME_WIDTH / 2, 660, 'Entering name in 2 seconds…', {
+      this.add.text(GAME_WIDTH / 2, 680, 'Entering name in 2 seconds…', {
         fontSize: '28px',
         fontFamily: '"Courier New", Courier, monospace',
         color: '#445566',
@@ -64,11 +78,10 @@ export class GameOverScene extends Phaser.Scene {
         this.scene.start('NameEntryScene', { score, mode });
       });
     } else {
-      this.makeBtn(GAME_WIDTH / 2 - 260, 600, '▶  PLAY AGAIN', '#00ccff', () => {
+      this.makeBtn(GAME_WIDTH / 2 - 280, 630, '▶  PLAY AGAIN', '#00ccff', () => {
         this.scene.start(mode === 'infinite' ? 'InfiniteScene' : 'CampaignScene', { mode, stage: 1 });
       });
-
-      this.makeBtn(GAME_WIDTH / 2 + 260, 600, '⌂  MAIN MENU', '#ff9900', () => {
+      this.makeBtn(GAME_WIDTH / 2 + 280, 630, '⌂  MAIN MENU', '#ff9900', () => {
         this.scene.start('MainMenuScene');
       });
     }

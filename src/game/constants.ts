@@ -71,3 +71,36 @@ export const VALID_CONSONANTS = new Set('BCDFGHJKLMNPRSTVYZ');
 export const NAME_LENGTH      = 5;
 export const MAX_HIGH_SCORES  = 3;
 export const HS_STORAGE_KEY   = 'deflect_wars_highscores';
+
+// ─── Enemy Kill Scores ────────────────────────────────────────────────────────
+export const SCORE_KILL_BATTLE_DROID = 300;
+export const SCORE_KILL_HEAVY_DROID  = 600;
+export const SCORE_KILL_SHIELD_DROID = 500;
+export const SCORE_KILL_BOSS         = 5000;
+
+// ─── Enemy Stats ──────────────────────────────────────────────────────────────
+export const BATTLE_DROID_HP         = 2;
+export const BATTLE_DROID_SHOOT_MS   = 2200;  // ms between shots
+export const HEAVY_DROID_HP          = 5;
+export const HEAVY_DROID_SHOOT_MS    = 3500;
+export const SHIELD_DROID_HP         = 3;
+export const SHIELD_DROID_SHOOT_MS   = 2800;
+export const SHIELD_DEPLOY_MS        = 1200;  // ms to deploy after entering
+
+// ─── Boss Constants ───────────────────────────────────────────────────────────
+export const BOSS_HP                = 6;    // force hits to defeat
+export const BOSS_HOME_X            = 1620; // resting x position
+export const BOSS_Y                 = 515;  // vertical centre (same as player mid)
+export const BOSS_CHARGE_PREPARE_MS = 900;  // windup before dash
+export const BOSS_CHARGE_SPEED      = 1400; // px / second during dash
+export const BOSS_SLASH_X           = 420;  // x at which saber slash triggers
+export const BOSS_SLASH_MS          = 600;  // duration of slash window
+export const BOSS_RETURN_SPEED      = 700;  // px / second returning
+export const BOSS_STAGGER_MS        = 1200; // stagger duration after force hit
+export const BOSS_IDLE_INTERVAL_MS  = 3500; // ms between charge cycles
+export const BOSS_FORCE_DAMAGE      = 2;    // HP lost per Force Choke hit
+
+// ─── Enemy layout ─────────────────────────────────────────────────────────────
+/** X positions where enemies are placed (spread across right half). */
+export const ENEMY_SPAWN_XS = [1580, 1680, 1760, 1840];
+export const ENEMY_ENTER_SPEED = 220; // px / second sliding in

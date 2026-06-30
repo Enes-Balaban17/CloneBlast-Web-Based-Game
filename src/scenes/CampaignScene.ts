@@ -2,30 +2,36 @@ import Phaser from 'phaser';
 import {
   GAME_WIDTH, GAME_HEIGHT,
   UPPER_LANE_Y, LOWER_LANE_Y, GROUND_Y,
-  PLAYER_X, ENEMY_AREA_X,
+  PLAYER_X, PLAYER_Y,
   MAX_HP, MAX_STAMINA, MAX_FORCE,
   DEFLECT_WINDOW_NORMAL, DEFLECT_WINDOW_PERFECT,
-  BLASTER_SPEED, BLASTER_SPAWN_INTERVAL,
+  BLASTER_SPAWN_INTERVAL,
   FORCE_PER_NORMAL_DEFLECT, FORCE_PER_PERFECT_DEFLECT,
+  BOSS_FORCE_DAMAGE,
   COL_BG, COL_GROUND, COL_ZONE_NORMAL, COL_ZONE_PERFECT,
-  COL_BATTLE_DROID,
+  SCORE_STAGE_CLEAR,
 } from '../game/constants';
-import { DeflectResult, PlayerState } from '../game/types';
+import { DeflectResult, PlayerState, BossState } from '../game/types';
 import type { Lane, GameSceneData } from '../game/types';
+
 import { Player }        from '../entities/Player';
 import { Blaster }       from '../entities/Blaster';
+import type { Enemy }    from '../entities/Enemy';
+
 import { InputSystem }   from '../systems/InputSystem';
 import { StaminaSystem } from '../systems/StaminaSystem';
 import { ForceSystem }   from '../systems/ForceSystem';
 import { DeflectSystem } from '../systems/DeflectSystem';
 import { ScoreSystem }   from '../systems/ScoreSystem';
 import { ComboSystem }   from '../systems/ComboSystem';
+import { StageSystem }   from '../systems/StageSystem';
+import { WaveSystem }    from '../systems/WaveSystem';
 
-// ── HUD geometry ─────────────────────────────────────────────────────────────
+// ── HUD constants ─────────────────────────────────────────────────────────────
 const BAR_X   = 20;
-const BAR_Y0  = 24;   // HP row
-const BAR_Y1  = 60;   // Stamina row
-const BAR_Y2  = 96;   // Force row
+const BAR_Y0  = 24;
+const BAR_Y1  = 60;
+const BAR_Y2  = 96;
 const BAR_W   = 280;
 const BAR_H   = 20;
 const PIP_W   = 22;
@@ -33,8 +39,8 @@ const PIP_GAP = 4;
 
 export class CampaignScene extends Phaser.Scene {
   // ── Entities ────────────────────────────────────────────────────────────────
-  protected player!:   Player;
-  protected blasters:  Blaster[] = [];
+  protected player!:  Player;
+  protected blasters: Blaster[] = [];
 
   // ── Systems ─────────────────────────────────────────────────────────────────
   protected keys!:    InputSystem;
@@ -43,37 +49,39 @@ export class CampaignScene extends Phaser.Scene {
   protected deflect!: DeflectSystem;
   protected combo!:   ComboSystem;
   protected score!:   ScoreSystem;
+  protected stages!:  StageSystem;
+  protected waves!:   WaveSystem;
 
-  // ── HUD objects ──────────────────────────────────────────────────────────────
-  private hudGfx!:      Phaser.GameObjects.Graphics;
-  private scoreText!:   Phaser.GameObjects.Text;
-  private comboText!:   Phaser.GameObjects.Text;
-  private chargeText!:  Phaser.GameObjects.Text;
-  private feedbackText!:Phaser.GameObjects.Text;
-  private debugText!:   Phaser.GameObjects.Text;
+  // ── HUD ──────────────────────────────────────────────────────────────────────
+  private hudGfx!:       Phaser.GameObjects.Graphics;
+  private scoreText!:    Phaser.GameObjects.Text;
+  private comboText!:    Phaser.GameObjects.Text;
+  private chargeText!:   Phaser.GameObjects.Text;
+  private feedbackText!: Phaser.GameObjects.Text;
+  private stageText!:    Phaser.GameObjects.Text;
+  private debugText!:    Phaser.GameObjects.Text;
 
   // ── State ───────────────────────────────────────────────────────────────────
   protected mode: 'campaign' | 'infinite' = 'campaign';
-  private spawnTimer       = 0;
   protected spawnInterval  = BLASTER_SPAWN_INTERVAL;
-  private feedbackMs       = 0;
-  private gameActive       = false;
+  private   spawnTimer     = 0;
+  private   feedbackMs     = 0;
+  protected gameActive     = false;
+  private   stageClearPending = false;
 
   constructor(sceneKey = 'CampaignScene') { super(sceneKey); }
 
   // ════════════════════════════════════════════════════════════════════════════
-  // PHASER LIFECYCLE
+  // LIFECYCLE
   // ════════════════════════════════════════════════════════════════════════════
 
   create(data: GameSceneData): void {
-    this.mode = data?.mode ?? 'campaign';
-
-    // Fresh state
-    this.blasters     = [];
-    this.spawnTimer   = 0;
-    this.spawnInterval = BLASTER_SPAWN_INTERVAL;
-    this.feedbackMs   = 0;
-    this.gameActive   = true;
+    this.mode            = data?.mode ?? 'campaign';
+    this.blasters        = [];
+    this.spawnTimer      = 0;
+    this.feedbackMs      = 0;
+    this.gameActive      = true;
+    this.stageClearPending = false;
 
     // Systems
     this.combo   = new ComboSystem();
@@ -83,68 +91,146 @@ export class CampaignScene extends Phaser.Scene {
     this.force   = new ForceSystem();
     this.deflect = new DeflectSystem();
 
+    if (this.mode === 'campaign') {
+      this.stages = new StageSystem(
+        this,
+        (stageDef) => {
+          // On stage clear: award score bonus, show message
+          this.score.addStageClear();
+          const msg = stageDef.isBossStage
+            ? '★ CAMPAIGN COMPLETE! ★'
+            : `★ STAGE ${stageDef.stageNumber} CLEAR! ★`;
+          this.showFeedback(msg, '#ffdd00');
+        },
+        () => this.endGame(true),
+      );
+
+      this.waves = new WaveSystem(
+        this,
+        BLASTER_SPAWN_INTERVAL,          // base — StageSystem overrides via boltSpeed
+        BLASTER_SPAWN_INTERVAL,
+        (b) => this.blasters.push(b),
+        (e) => this.onEnemyKilled(e),
+      );
+    }
+
     this.buildBackground();
     this.player = new Player(this);
+
+    // Restore carry-over score / force (between stages)
+    if (data?.carryScore) this.score['score'] = data.carryScore;
+    if (data?.carryForce) this.player.force = Math.min(data.carryForce, MAX_FORCE);
+
     this.buildHUD();
+
+    // Campaign: load first or resumed stage
+    if (this.mode === 'campaign') {
+      const stageNum = data?.stage ?? 1;
+      this.stages.currentStageIndex = Math.max(0, stageNum - 1);
+      this.spawnInterval = this.stages.spawnInterval;
+      this.loadCurrentStage();
+    }
   }
 
   update(time: number, delta: number): void {
     if (!this.gameActive) return;
 
-    // ── Regen ──────────────────────────────────────────────────────────────────
+    // Passive stamina regen
     this.stamina.update(this.player, delta);
 
-    // ── ESC → Main Menu ────────────────────────────────────────────────────────
+    // ESC → Main Menu
     if (this.keys.escJustDown()) {
       this.scene.start('MainMenuScene');
       return;
     }
 
-    // ── Blaster spawning ───────────────────────────────────────────────────────
-    this.spawnTimer += delta;
-    if (this.spawnTimer >= this.spawnInterval) {
-      this.spawnTimer = 0;
-      this.spawnBlaster();
+    // ── Campaign: tick wave system ─────────────────────────────────────────────
+    if (this.mode === 'campaign' && this.waves) {
+      this.waves.update(delta);
+
+      // Check boss slash threat each frame
+      const boss = this.waves.getBoss();
+      if (boss) {
+        boss.tryDeflectBlasters(this.blasters);
+        boss.onSlashHitPlayer = () => this.onBlasterHitPlayer();
+
+        if (boss.slashActive && boss.bossState === BossState.SaberSlash) {
+          // If player doesn't deflect (no deflect input), they take damage
+          // Damage is applied once per slash cycle by the boss callback above
+        }
+      }
+
+      // Stage clear check (only once)
+      if (!this.stageClearPending && this.waves.isStageComplete()) {
+        this.stageClearPending = true;
+        this.stages.stageClear((amount, max) => this.player.heal(amount));
+        // After delay, reload next stage (handled via StageSystem timer)
+        this.time.delayedCall(2200, () => {
+          if (this.gameActive) {
+            this.stageClearPending = false;
+            this.loadCurrentStage();
+          }
+        });
+      }
     }
 
-    // ── Clean up destroyed blasters ────────────────────────────────────────────
-    this.blasters = this.blasters.filter(b => b.active);
+    // ── Blaster spawning (infinite or campaign's own timer) ──────────────────
+    // In campaign, enemies spawn their own bolts; we still run a fallback timer
+    // only in infinite mode or when there are no enemies.
+    const enemyCount = this.mode === 'campaign' && this.waves
+      ? this.waves.getEnemies().length
+      : 0;
 
-    // ── Move blasters & hit detection ─────────────────────────────────────────
+    if (this.mode === 'infinite' || (this.mode === 'campaign' && enemyCount === 0)) {
+      this.spawnTimer += delta;
+      if (this.spawnTimer >= this.spawnInterval) {
+        this.spawnTimer = 0;
+        this.spawnBlaster();
+      }
+    }
+
+    // ── Clean up & move blasters ──────────────────────────────────────────────
+    this.blasters = this.blasters.filter(b => b.active);
     for (const b of [...this.blasters]) {
       if (!b.active) continue;
       b.tick(delta);
 
-      // Reflected bolt leaves screen on the right
-      if (b.isReflected && b.x > GAME_WIDTH + 80) {
-        b.destroy();
-        continue;
-      }
-
-      // Normal bolt hits player
-      if (!b.isReflected && b.x <= PLAYER_X) {
-        b.destroy();
-        this.onBlasterHitPlayer();
-        continue;
+      if (b.isReflected) {
+        // Check if reflected bolt hits a normal enemy
+        if (this.mode === 'campaign' && this.waves) {
+          for (const e of this.waves.getEnemies()) {
+            if (e.canBeHitByReflected && e.overlapsBlaster(b)) {
+              b.destroy();
+              const died = e.takeDamage(1);
+              if (died) {/* kill handled by WaveSystem */ }
+              break;
+            }
+          }
+        }
+        if (b.active && b.x > GAME_WIDTH + 80) b.destroy();
+      } else {
+        if (b.x <= PLAYER_X) {
+          b.destroy();
+          this.onBlasterHitPlayer();
+        }
       }
     }
 
-    // ── Player is dead — no input processing ──────────────────────────────────
+    // ── Dead player ───────────────────────────────────────────────────────────
     if (this.player.state === PlayerState.Dead) {
       this.redrawHUD();
       return;
     }
 
-    // ── Force Choke: SPACE down ────────────────────────────────────────────────
+    // ── Force Choke (SPACE hold/release) ──────────────────────────────────────
     if (this.keys.chokeJustDown()) {
       if (this.force.canStartChoke(this.player)) {
         this.force.startChoke(this.player, time);
-      } else if (this.player.force < MAX_FORCE) {
+      } else {
         this.showFeedback('FORCE NOT FULL!', '#ff4444');
       }
     }
 
-    // ── Force Choke: SPACE up ─────────────────────────────────────────────────
     if (this.keys.chokeJustUp()) {
       const fired = this.force.releaseChoke(this.player, time, this.blasters);
       if (fired) {
@@ -152,6 +238,22 @@ export class CampaignScene extends Phaser.Scene {
         this.score.addForceChoke();
         this.showFeedback('FORCE CHOKE!', '#cc44ff');
         this.cameras.main.shake(300, 0.008);
+
+        // Damage normal enemies with Force
+        if (this.mode === 'campaign' && this.waves) {
+          this.waves.applyForceDamage(2);
+        }
+
+        // Boss: Force Choke hits it
+        const boss = this.mode === 'campaign' && this.waves ? this.waves.getBoss() : null;
+        if (boss) {
+          const defeated = boss.receiveForceHit();
+          if (defeated) {
+            this.showFeedback('BOSS DEFEATED!', '#ffdd00');
+          }
+        }
+
+        this.spawnForceShockwave();
         this.time.delayedCall(600, () => {
           if (this.player.state === PlayerState.ForceChokeRelease) {
             this.player.state = PlayerState.Idle;
@@ -160,7 +262,7 @@ export class CampaignScene extends Phaser.Scene {
       }
     }
 
-    // ── Force Reflect: D key ───────────────────────────────────────────────────
+    // ── Force Reflect (D key) ──────────────────────────────────────────────────
     if (this.keys.reflectJustDown()) {
       if (this.force.canReflect(this.player)) {
         const reflected = this.force.doReflect(this.player, this.blasters);
@@ -177,7 +279,7 @@ export class CampaignScene extends Phaser.Scene {
           this.showFeedback('NO TARGET!', '#ff8800');
         }
       } else {
-        this.showFeedback(`NEED 25 FORCE  (${Math.floor(this.player.force)})`, '#ff4444');
+        this.showFeedback(`NEED 25 FORCE (${Math.floor(this.player.force)})`, '#ff4444');
       }
     }
 
@@ -185,7 +287,7 @@ export class CampaignScene extends Phaser.Scene {
     if (this.keys.deflectJustDown('upper')) this.handleDeflect('upper');
     if (this.keys.deflectJustDown('lower')) this.handleDeflect('lower');
 
-    // ── HUD refresh ───────────────────────────────────────────────────────────
+    // ── HUD ───────────────────────────────────────────────────────────────────
     this.redrawHUD();
     this.updateTextElements(time);
   }
@@ -251,27 +353,37 @@ export class CampaignScene extends Phaser.Scene {
     }
   }
 
-  private onBlasterHitPlayer(): void {
+  protected onBlasterHitPlayer(): void {
+    if (this.player.state === PlayerState.Dead) return;
     this.combo.reset();
     const died = this.player.takeDamage(1);
     this.cameras.main.shake(220, 0.012);
     this.showFeedback('HIT!', '#ff2222');
 
     if (died) {
-      this.gameActive = false;
-      this.time.delayedCall(700, () => {
-        this.scene.start('GameOverScene', {
-          score: this.score.getScore(),
-          mode:  this.mode,
-        });
-      });
+      this.endGame(false);
     } else {
       this.time.delayedCall(280, () => {
-        if (this.player.state === PlayerState.Hit) {
-          this.player.state = PlayerState.Idle;
-        }
+        if (this.player.state === PlayerState.Hit) this.player.state = PlayerState.Idle;
       });
     }
+  }
+
+  private onEnemyKilled(enemy: Enemy): void {
+    this.score['score'] = (this.score['score'] as number) + enemy.killScore;
+  }
+
+  private endGame(victory: boolean): void {
+    if (!this.gameActive) return;
+    this.gameActive = false;
+    const delay = victory ? 1800 : 700;
+    this.time.delayedCall(delay, () => {
+      this.scene.start('GameOverScene', {
+        score:   this.score.getScore(),
+        mode:    this.mode,
+        victory,
+      });
+    });
   }
 
   // ════════════════════════════════════════════════════════════════════════════
@@ -280,59 +392,62 @@ export class CampaignScene extends Phaser.Scene {
 
   protected spawnBlaster(): void {
     const lane: Lane = Math.random() < 0.5 ? 'upper' : 'lower';
-    const y          = lane === 'upper' ? UPPER_LANE_Y : LOWER_LANE_Y;
-    const b          = new Blaster(this, GAME_WIDTH - 40, y, lane, BLASTER_SPEED);
+    const y = lane === 'upper' ? UPPER_LANE_Y : LOWER_LANE_Y;
+    const speed = this.mode === 'campaign' && this.stages
+      ? this.stages.boltSpeed
+      : 420;
+    const b = new Blaster(this, GAME_WIDTH - 40, y, lane, speed);
     this.blasters.push(b);
   }
 
+  private loadCurrentStage(): void {
+    if (!this.stages || !this.waves) return;
+    const stageDef = this.stages.currentStage;
+    this.spawnInterval = stageDef.spawnIntervalMs;
+    this.stageText?.setText(`STAGE ${stageDef.stageNumber} / 7`);
+    this.waves.loadStage(stageDef);
+    this.showFeedback(`STAGE ${stageDef.stageNumber}`, '#ffffff');
+  }
+
+  // ── Force shockwave VFX ──────────────────────────────────────────────────────
+  private spawnForceShockwave(): void {
+    const ring = this.add.graphics().setDepth(18);
+    ring.lineStyle(6, 0x4488ff, 0.9);
+    ring.strokeCircle(PLAYER_X, PLAYER_Y, 20);
+    this.tweens.add({
+      targets: ring,
+      scaleX: 18,
+      scaleY: 8,
+      alpha: 0,
+      duration: 550,
+      ease: 'Cubic.easeOut',
+      onComplete: () => ring.destroy(),
+    });
+  }
+
   // ════════════════════════════════════════════════════════════════════════════
-  // VISUALS — background
+  // BACKGROUND
   // ════════════════════════════════════════════════════════════════════════════
 
   private buildBackground(): void {
-    // Sky
     this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, COL_BG);
-
-    // Lane guides (subtle)
     this.add.rectangle(GAME_WIDTH / 2, UPPER_LANE_Y, GAME_WIDTH, 2, 0x1a2255, 0.8);
     this.add.rectangle(GAME_WIDTH / 2, LOWER_LANE_Y, GAME_WIDTH, 2, 0x1a2255, 0.8);
-
-    // Ground
     this.add.rectangle(GAME_WIDTH / 2, GROUND_Y, GAME_WIDTH, 6, COL_GROUND);
 
-    // Enemy placeholder area
-    this.add.rectangle(ENEMY_AREA_X, (UPPER_LANE_Y + LOWER_LANE_Y) / 2,
-      8, LOWER_LANE_Y - UPPER_LANE_Y, COL_BATTLE_DROID, 0.15);
-    this.add.text(ENEMY_AREA_X, UPPER_LANE_Y - 36, 'ENEMY ZONE', {
-      fontSize: '22px',
-      fontFamily: '"Courier New", Courier, monospace',
-      color: '#ff660033',
-    }).setOrigin(0.5, 1);
-
-    // ── Deflect zone visualisation (debug) ────────────────────────────────────
+    // Deflect zone guides
     [UPPER_LANE_Y, LOWER_LANE_Y].forEach(ly => {
-      // Normal window — yellow ghost
       this.add.rectangle(
-        PLAYER_X + DEFLECT_WINDOW_NORMAL / 2,
-        ly,
-        DEFLECT_WINDOW_NORMAL,
-        18,
-        COL_ZONE_NORMAL,
-        0.12,
+        PLAYER_X + DEFLECT_WINDOW_NORMAL / 2, ly,
+        DEFLECT_WINDOW_NORMAL, 18, COL_ZONE_NORMAL, 0.12,
       );
-      // Perfect window — green ghost
       this.add.rectangle(
-        PLAYER_X + DEFLECT_WINDOW_PERFECT / 2,
-        ly,
-        DEFLECT_WINDOW_PERFECT,
-        18,
-        COL_ZONE_PERFECT,
-        0.25,
+        PLAYER_X + DEFLECT_WINDOW_PERFECT / 2, ly,
+        DEFLECT_WINDOW_PERFECT, 18, COL_ZONE_PERFECT, 0.25,
       );
     });
 
-    // Mode tag
-    this.add.text(GAME_WIDTH / 2, 16, this.mode.toUpperCase() + ' MODE  ·  [ESC] Menu', {
+    this.add.text(GAME_WIDTH / 2, 14, this.mode.toUpperCase() + ' MODE  ·  [ESC] Menu', {
       fontSize: '24px',
       fontFamily: '"Courier New", Courier, monospace',
       color: '#334455',
@@ -340,7 +455,7 @@ export class CampaignScene extends Phaser.Scene {
   }
 
   // ════════════════════════════════════════════════════════════════════════════
-  // VISUALS — HUD
+  // HUD
   // ════════════════════════════════════════════════════════════════════════════
 
   private buildHUD(): void {
@@ -351,7 +466,7 @@ export class CampaignScene extends Phaser.Scene {
       fontFamily: '"Courier New", Courier, monospace',
     };
 
-    this.add.text(BAR_X, BAR_Y0 - 2, 'HP',     { ...LBL, color: '#00ff88' }).setDepth(21);
+    this.add.text(BAR_X, BAR_Y0 - 2, 'HP',      { ...LBL, color: '#00ff88' }).setDepth(21);
     this.add.text(BAR_X, BAR_Y1 - 2, 'STAMINA', { ...LBL, color: '#ffcc00' }).setDepth(21);
     this.add.text(BAR_X, BAR_Y2 - 2, 'FORCE',   { ...LBL, color: '#8866ff' }).setDepth(21);
 
@@ -360,6 +475,16 @@ export class CampaignScene extends Phaser.Scene {
       fontFamily: '"Courier New", Courier, monospace',
       color: '#ffffff',
     }).setOrigin(1, 0).setDepth(21);
+
+    this.stageText = this.add.text(GAME_WIDTH / 2, 20, '', {
+      fontSize: '30px',
+      fontFamily: '"Courier New", Courier, monospace',
+      color: '#aaaacc',
+    }).setOrigin(0.5, 0).setDepth(21);
+
+    if (this.mode === 'campaign' && this.stages) {
+      this.stageText.setText(`STAGE ${this.stages.stageNumber} / 7`);
+    }
 
     this.comboText = this.add.text(GAME_WIDTH / 2, 70, '', {
       fontSize: '52px',
@@ -386,19 +511,18 @@ export class CampaignScene extends Phaser.Scene {
     }).setOrigin(0.5).setAlpha(0).setDepth(22);
 
     this.debugText = this.add.text(20, GAME_HEIGHT - 20, '', {
-      fontSize: '20px',
+      fontSize: '18px',
       fontFamily: '"Courier New", Courier, monospace',
       color: '#445566',
       backgroundColor: '#00000077',
-      padding: { x: 6, y: 3 },
+      padding: { x: 4, y: 2 },
     }).setOrigin(0, 1).setDepth(21);
   }
 
   private redrawHUD(): void {
-    const g = this.hudGfx;
+    const g  = this.hudGfx;
     g.clear();
-
-    const lx = BAR_X + 76; // bar left edge (after label)
+    const lx = BAR_X + 76;
 
     // HP pips
     for (let i = 0; i < MAX_HP; i++) {
@@ -408,20 +532,14 @@ export class CampaignScene extends Phaser.Scene {
 
     // Stamina bar
     const stW = Math.round((this.player.stamina / MAX_STAMINA) * BAR_W);
-    g.fillStyle(0x1a1a1a, 1);
-    g.fillRect(lx, BAR_Y1, BAR_W, BAR_H);
-    g.fillStyle(0xffcc00, 1);
-    g.fillRect(lx, BAR_Y1, stW, BAR_H);
+    g.fillStyle(0x111111, 1); g.fillRect(lx, BAR_Y1, BAR_W, BAR_H);
+    g.fillStyle(0xffcc00, 1); g.fillRect(lx, BAR_Y1, stW,  BAR_H);
 
     // Force bar
     const frW   = Math.round((this.player.force / MAX_FORCE) * BAR_W);
     const frCol = this.player.force >= MAX_FORCE ? 0xffffff : 0x8866ff;
-    g.fillStyle(0x1a1a1a, 1);
-    g.fillRect(lx, BAR_Y2, BAR_W, BAR_H);
-    g.fillStyle(frCol, 1);
-    g.fillRect(lx, BAR_Y2, frW, BAR_H);
-
-    // Force-full glow outline
+    g.fillStyle(0x111111, 1); g.fillRect(lx, BAR_Y2, BAR_W, BAR_H);
+    g.fillStyle(frCol,    1); g.fillRect(lx, BAR_Y2, frW,  BAR_H);
     if (this.player.force >= MAX_FORCE) {
       g.lineStyle(2, 0xffffff, 0.6);
       g.strokeRect(lx, BAR_Y2, BAR_W, BAR_H);
@@ -429,44 +547,40 @@ export class CampaignScene extends Phaser.Scene {
   }
 
   private updateTextElements(time: number): void {
-    // Score
     this.scoreText.setText(`SCORE: ${this.score.getScore().toLocaleString()}`);
 
-    // Combo
     const c = this.combo.getCombo();
     if (c >= 2) {
-      this.comboText
-        .setText(`COMBO ×${c}   [ ×${this.combo.getMultiplier()} ]`)
-        .setAlpha(1);
+      this.comboText.setText(`COMBO ×${c}   [ ×${this.combo.getMultiplier()} ]`).setAlpha(1);
     } else {
       this.comboText.setAlpha(0);
     }
 
-    // Force choke charge
     if (this.force.isCharging()) {
       const pct = Math.floor(this.force.getChargeProgress(time) * 100);
       this.chargeText.setText(`⚡ CHARGING ${pct}% ⚡`).setAlpha(1);
-      if (pct >= 100) this.chargeText.setColor('#ffdd00');
-      else            this.chargeText.setColor('#cc44ff');
+      this.chargeText.setColor(pct >= 100 ? '#ffdd00' : '#cc44ff');
     } else {
       this.chargeText.setAlpha(0);
     }
 
-    // Feedback fade
     if (this.feedbackMs > 0) {
       this.feedbackMs -= this.game.loop.delta;
-      const alpha = Math.min(this.feedbackMs / 300, 1);
-      this.feedbackText.setAlpha(alpha);
+      this.feedbackText.setAlpha(Math.min(this.feedbackMs / 300, 1));
     }
 
-    // Debug
+    const enemyCount = this.mode === 'campaign' && this.waves
+      ? this.waves.getEnemies().length
+      : 0;
     this.debugText.setText(
-      `HP:${this.player.hp}/${MAX_HP}  ST:${Math.floor(this.player.stamina)}  FO:${Math.floor(this.player.force)}` +
-      `  Bolts:${this.blasters.filter(b => b.active).length}  State:${this.player.state}`,
+      `HP:${this.player.hp}  ST:${Math.floor(this.player.stamina)}` +
+      `  FO:${Math.floor(this.player.force)}` +
+      `  Bolts:${this.blasters.filter(b => b.active).length}` +
+      `  Enemies:${enemyCount}  State:${this.player.state}`,
     );
   }
 
-  // ── helpers ────────────────────────────────────────────────────────────────
+  // ── Helpers ────────────────────────────────────────────────────────────────
 
   protected showFeedback(text: string, color: string): void {
     this.feedbackText.setText(text).setColor(color).setAlpha(1);
@@ -474,12 +588,12 @@ export class CampaignScene extends Phaser.Scene {
   }
 
   private flashLane(lane: Lane): void {
-    const y = lane === 'upper' ? UPPER_LANE_Y : LOWER_LANE_Y;
+    const y     = lane === 'upper' ? UPPER_LANE_Y : LOWER_LANE_Y;
     const flash = this.add.rectangle(PLAYER_X + 40, y, 120, 20, 0xffffff, 0.8).setDepth(15);
     this.tweens.add({
-      targets: flash,
-      alpha: 0,
-      scaleX: 3,
+      targets:  flash,
+      alpha:    0,
+      scaleX:   3,
       duration: 180,
       onComplete: () => flash.destroy(),
     });
