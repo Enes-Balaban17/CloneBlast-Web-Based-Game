@@ -68,7 +68,8 @@ export const COL_ZONE_PERFECT     = 0x00ff88;
 
 // ─── Name Entry ───────────────────────────────────────────────────────────────
 export const VALID_CONSONANTS = new Set('BCDFGHJKLMNPRSTVYZ');
-export const NAME_LENGTH      = 5;
+export const NAME_MIN_LENGTH  = 3;   // minimum accepted name length
+export const NAME_LENGTH      = 5;   // maximum accepted name length
 export const MAX_HIGH_SCORES  = 3;
 export const HS_STORAGE_KEY   = 'deflect_wars_highscores';
 
