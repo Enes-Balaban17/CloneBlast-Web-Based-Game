@@ -51,7 +51,17 @@ export class PreloadScene extends Phaser.Scene {
   constructor() { super('PreloadScene'); }
 
   preload(): void {
-    // ── Uncomment when actual assets are placed in public/assets/ ─────────────
+    // ── Main menu logo (ACTIVE — file: public/assets/ui/clone_blast_logo.png) ──
+    // Suppress Phaser's default error texture on failure so MainMenuScene
+    // can detect the missing file and fall back to styled text gracefully.
+    this.load.on('loaderror', (file: { key: string }) => {
+      if (file.key === 'logo_main') {
+        console.warn('[PreloadScene] clone_blast_logo.png not found — text fallback will be used.');
+      }
+    });
+    this.load.image('logo_main', 'assets/ui/clone_blast_logo.png');
+
+    // ── Other assets (uncomment when files are placed in public/assets/) ───────
 
     // this.load.atlas('player',       'assets/player/player_sheet.png',             'assets/player/player_sheet.json');
     // this.load.atlas('battle_droid', 'assets/enemies/battle_droid/battle_droid_sheet.png', 'assets/enemies/battle_droid/battle_droid_sheet.json');
