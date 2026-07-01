@@ -19,6 +19,10 @@ const BUTTON_GAP     = 110;
 const BTN_W = 560;
 const BTN_H = 90;
 
+const BUTTON_ICON_GAP     = 24;   // space between icon and text label
+const CAMPAIGN_ICON_SCALE = 0.70; // visually scale play triangle down (was too large)
+const INFINITE_ICON_SCALE = 1.35; // visually scale infinity loop up (was too tiny)
+
 const HS_PANEL_W        = 660;
 const HS_PANEL_H        = 226;
 const HS_PANEL_CENTER_Y = 695;
@@ -87,16 +91,37 @@ export class MainMenuScene extends Phaser.Scene {
   }
 
   private buildButtons(): void {
-    this.makeMenuButton(CX, BUTTON_START_Y, '▶  CAMPAIGN MODE', 0x0099cc, '#00ccff',
-      () => { hideMenuGifBackground(); this.scene.start('CampaignScene', { mode: 'campaign', stage: 1 }); });
-    this.makeMenuButton(CX, BUTTON_START_Y + BUTTON_GAP, '∞  INFINITE MODE', 0xcc7700, '#ff9900',
-      () => { hideMenuGifBackground(); this.scene.start('InfiniteScene', { mode: 'infinite' }); });
+    this.makeMenuButton(
+      CX, BUTTON_START_Y,
+      '▶', 'CAMPAIGN MODE',
+      0x0099cc, '#00ccff',
+      CAMPAIGN_ICON_SCALE,
+      () => { hideMenuGifBackground(); this.scene.start('CampaignScene', { mode: 'campaign', stage: 1 }); }
+    );
+
+    this.makeMenuButton(
+      CX, BUTTON_START_Y + BUTTON_GAP,
+      '∞', 'INFINITE MODE',
+      0xcc7700, '#ff9900',
+      INFINITE_ICON_SCALE,
+      () => { hideMenuGifBackground(); this.scene.start('InfiniteScene', { mode: 'infinite' }); }
+    );
   }
 
-  private makeMenuButton(cx: number, cy: number, label: string, borderHex: number, accentCss: string, cb: () => void): void {
+  private makeMenuButton(
+    cx: number,
+    cy: number,
+    iconChar: string,
+    labelText: string,
+    borderHex: number,
+    accentCss: string,
+    iconScale: number,
+    cb: () => void
+  ): void {
     const bx = cx - BTN_W / 2;
     const by = cy - BTN_H / 2;
     const gfx = this.add.graphics();
+
     const drawNormal = () => {
       gfx.clear();
       gfx.fillStyle(0x0a0f1e, 0.80); gfx.fillRoundedRect(bx, by, BTN_W, BTN_H, 8);
@@ -108,12 +133,43 @@ export class MainMenuScene extends Phaser.Scene {
       gfx.lineStyle(2.5, borderHex, 1.0); gfx.strokeRoundedRect(bx, by, BTN_W, BTN_H, 8);
     };
     drawNormal();
-    const txt = this.add.text(cx, cy, label, {
+
+    // 1. Create text label and icon separately
+    const txt = this.add.text(0, 0, labelText, {
       fontSize: '48px', fontFamily: FONT, color: '#ffffff', stroke: accentCss, strokeThickness: 3,
-    }).setOrigin(0.5);
+    }).setOrigin(0.5, 0.5);
+
+    const icon = this.add.text(0, 0, iconChar, {
+      fontSize: '48px', fontFamily: FONT, color: '#ffffff', stroke: accentCss, strokeThickness: 3,
+    }).setOrigin(0.5, 0.5);
+
+    // Apply the scaling to the icon
+    icon.setScale(iconScale);
+
+    // 2. Measure widths to align and center perfectly
+    const iconScaledW   = icon.width * iconScale;
+    const totalContentW = iconScaledW + BUTTON_ICON_GAP + txt.width;
+    const startX        = cx - totalContentW / 2;
+
+    // 3. Position the objects inside the button
+    icon.x = startX + iconScaledW / 2;
+    icon.y = cy;
+
+    txt.x  = startX + iconScaledW + BUTTON_ICON_GAP + txt.width / 2;
+    txt.y  = cy;
+
+    // 4. Interaction zone and hover triggers
     const zone = this.add.zone(cx, cy, BTN_W, BTN_H).setInteractive({ useHandCursor: true });
-    zone.on('pointerover',  () => { drawHover();  txt.setColor(accentCss); });
-    zone.on('pointerout',   () => { drawNormal(); txt.setColor('#ffffff'); });
+    zone.on('pointerover',  () => {
+      drawHover();
+      txt.setColor(accentCss);
+      icon.setColor(accentCss);
+    });
+    zone.on('pointerout',   () => {
+      drawNormal();
+      txt.setColor('#ffffff');
+      icon.setColor('#ffffff');
+    });
     zone.on('pointerdown',  cb);
   }
 
