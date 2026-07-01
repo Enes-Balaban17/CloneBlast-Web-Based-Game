@@ -12,9 +12,9 @@ const FONT = '"Courier New", Courier, monospace';
 
 // ── Logo ──────────────────────────────────────────────────────────────────
 const LOGO_KEY        = 'logo_main';   // texture key loaded in PreloadScene
-const LOGO_CENTER_Y   = 120;           // vertical centre of the logo image
-const LOGO_MAX_WIDTH  = 720;           // max display width  (px) — scales down if needed
-const LOGO_MAX_HEIGHT = 180;           // max display height (px) — preserves aspect ratio
+const LOGO_CENTER_Y   = 110;           // moved 10 px up to keep gap to tagline
+const LOGO_MAX_WIDTH  = 920;           // was 720 — +28% to make logo visibly larger
+const LOGO_MAX_HEIGHT = 230;           // was 180 — scaled proportionally
 
 // ── Tagline ───────────────────────────────────────────────────────────────
 const TAGLINE_Y       = 258;           // centred under the logo
