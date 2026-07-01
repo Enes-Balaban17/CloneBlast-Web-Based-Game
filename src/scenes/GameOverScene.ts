@@ -2,11 +2,13 @@ import Phaser from 'phaser';
 import { GAME_WIDTH } from '../game/constants';
 import { HighScoreSystem } from '../systems/HighScoreSystem';
 import type { GameOverData } from '../game/types';
+import { hideMenuGifBackground } from '../ui/MenuGifBackground';
 
 export class GameOverScene extends Phaser.Scene {
   constructor() { super('GameOverScene'); }
 
   create(data: GameOverData): void {
+    hideMenuGifBackground(); // ensure menu GIF is gone in game-over screen
     const score   = data?.score   ?? 0;
     const mode    = data?.mode    ?? 'campaign';
     const victory = data?.victory ?? false;

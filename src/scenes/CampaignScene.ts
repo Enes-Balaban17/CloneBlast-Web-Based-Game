@@ -26,6 +26,7 @@ import { ScoreSystem }   from '../systems/ScoreSystem';
 import { ComboSystem }   from '../systems/ComboSystem';
 import { StageSystem }   from '../systems/StageSystem';
 import { WaveSystem }    from '../systems/WaveSystem';
+import { hideMenuGifBackground } from '../ui/MenuGifBackground';
 
 // ── HUD constants ─────────────────────────────────────────────────────────────
 const BAR_X   = 20;
@@ -76,6 +77,7 @@ export class CampaignScene extends Phaser.Scene {
   // ════════════════════════════════════════════════════════════════════════════
 
   create(data: GameSceneData): void {
+    hideMenuGifBackground(); // ensure GIF layer is hidden before gameplay
     this.mode            = data?.mode ?? 'campaign';
     this.blasters        = [];
     this.spawnTimer      = 0;

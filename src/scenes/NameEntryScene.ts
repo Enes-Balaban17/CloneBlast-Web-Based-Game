@@ -5,6 +5,7 @@ import {
 } from '../game/constants';
 import { HighScoreSystem } from '../systems/HighScoreSystem';
 import type { NameEntryData } from '../game/types';
+import { hideMenuGifBackground } from '../ui/MenuGifBackground';
 
 // ── Layout ────────────────────────────────────────────────────────────────────
 const CX = GAME_WIDTH  / 2;  // horizontal centre
@@ -35,6 +36,7 @@ export class NameEntryScene extends Phaser.Scene {
   // ════════════════════════════════════════════════════════════════════════════
 
   create(data: NameEntryData): void {
+    hideMenuGifBackground(); // name entry must not show GIF behind panel
     this.score = data?.score ?? 0;
     this.mode  = data?.mode  ?? 'campaign';
     this.chars = [];

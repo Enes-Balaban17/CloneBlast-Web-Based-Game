@@ -6,16 +6,45 @@
     <meta name="description" content="CloneBlast — Browser-based 2D pixel-art deflect combat game built with TypeScript and Phaser 3." />
     <title>CloneBlast</title>
     <style>
-      * { margin: 0; padding: 0; box-sizing: border-box; }
-      html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
+      /* ── Reset ─────────────────────────────────────────────────────────── */
+      *, *::before, *::after {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      html, body {
+        width: 100%;
+        height: 100%;
+        background: #000;   /* fallback when GIF is hidden / missing */
+        overflow: hidden;
+      }
+
+      /* ── GIF background layer ──────────────────────────────────────────── */
+      /*   Created dynamically by MenuGifBackground.ts; rules here ensure    */
+      /*   it always sits below the Phaser canvas.                           */
+      #menu-gif-bg {
+        z-index: 0;
+        pointer-events: none;
+      }
+
+      /* ── Game container ────────────────────────────────────────────────── */
       #game-container {
+        position: relative;   /* establishes stacking context */
+        z-index: 1;           /* above the GIF layer          */
         display: flex;
         align-items: center;
         justify-content: center;
         width: 100%;
         height: 100%;
       }
-      canvas { display: block; }
+
+      /* ── Phaser canvas ─────────────────────────────────────────────────── */
+      canvas {
+        display: block;
+        position: relative;
+        z-index: 1;           /* above GIF, within the container */
+      }
     </style>
   </head>
   <body>
