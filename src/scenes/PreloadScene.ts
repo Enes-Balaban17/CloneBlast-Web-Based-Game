@@ -166,16 +166,16 @@ export class PreloadScene extends Phaser.Scene {
         this.anims.create({
           key: 'player_idle_anim',
           frames: [
-            { key: 'player_idle_01' },
-            { key: 'player_idle_02' },
-            { key: 'player_idle_03' },
-            { key: 'player_idle_04' }
+            { key: 'player_idle_01', duration: 300 },
+            { key: 'player_idle_02', duration: 220 },
+            { key: 'player_idle_03', duration: 220 },
+            { key: 'player_idle_04', duration: 260 },
+            { key: 'player_idle_03', duration: 220 },
+            { key: 'player_idle_02', duration: 220 }
           ],
-          frameRate: 4,
-          repeat: -1,
-          yoyo: false
+          repeat: -1
         });
-        console.log('[PreloadScene] Registered animation: player_idle_anim');
+        console.log('[PreloadScene] Registered animation: player_idle_anim (ping-pong with durations)');
       }
     }
   }
