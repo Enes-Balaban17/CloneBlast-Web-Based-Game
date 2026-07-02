@@ -146,6 +146,7 @@ export class CampaignScene extends Phaser.Scene {
 
     // Passive stamina regen
     this.stamina.update(this.player, delta);
+    this.player.update(time, delta);
 
     // ESC → Main Menu
     if (this.keys.escJustDown()) {
