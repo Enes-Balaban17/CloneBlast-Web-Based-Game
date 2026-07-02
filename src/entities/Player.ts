@@ -8,13 +8,20 @@ import {
 } from '../game/constants';
 import { PlayerState } from '../game/types';
 
-// Constants for custom slow idle timing (Option B manual controller)
-const IDLE_FRAME_DURATION_MS = 3500; // 3.5 seconds per frame
-const IDLE_FRAME_KEYS = [
-  'player_idle_01',
-  'player_idle_02',
-  'player_idle_03',
-  'player_idle_04'
+// Constants for custom slow idle timing (Option B manual controller with custom durations)
+interface IdleFrameConfig {
+  key: string;
+  duration: number;
+}
+
+const IDLE_SEQUENCE: IdleFrameConfig[] = [
+  { key: 'player_idle_01', duration: 3000 },
+  { key: 'player_idle_02', duration: 3000 },
+  { key: 'player_idle_03', duration: 2000 },
+  { key: 'player_idle_04', duration: 3000 },
+  { key: 'player_idle_03', duration: 2000 },
+  { key: 'player_idle_02', duration: 3000 },
+  { key: 'player_idle_01', duration: 3000 },
 ];
 
 export class Player {
@@ -54,7 +61,7 @@ export class Player {
       spriteObj.setFlipX(false);
 
       this.sprite = spriteObj;
-      console.log('[Player] Created sprite using processed frames (manual slow control).');
+      console.log('[Player] Created sprite using processed frames (manual slow control with custom sequence).');
     } else if (hasStaticSprite) {
       // 2. Fallback to static player_idle image
       const spriteObj = scene.add.sprite(PLAYER_X, 860, 'player_idle')
@@ -130,8 +137,7 @@ export class Player {
 
   /**
    * Called every frame from the active game scene update loop.
-   * Handles custom slow frame switching (3500ms duration per frame)
-   * while the player is in PlayerState.Idle.
+   * Handles custom slow ping-pong frame switching while the player is in PlayerState.Idle.
    */
   update(time: number, deltaMs: number): void {
     if (this.state === PlayerState.Dead) {
@@ -152,12 +158,15 @@ export class Player {
 
     if (this.state === PlayerState.Idle) {
       this.idleFrameTimer += deltaMs;
-      if (this.idleFrameTimer >= IDLE_FRAME_DURATION_MS) {
+      
+      const currentFrameConfig = IDLE_SEQUENCE[this.currentIdleFrameIndex];
+      
+      if (this.idleFrameTimer >= currentFrameConfig.duration) {
         this.idleFrameTimer = 0;
-        this.currentIdleFrameIndex = (this.currentIdleFrameIndex + 1) % IDLE_FRAME_KEYS.length;
+        this.currentIdleFrameIndex = (this.currentIdleFrameIndex + 1) % IDLE_SEQUENCE.length;
         
-        const nextFrame = IDLE_FRAME_KEYS[this.currentIdleFrameIndex];
-        this.sprite.setTexture(nextFrame);
+        const nextFrameConfig = IDLE_SEQUENCE[this.currentIdleFrameIndex];
+        this.sprite.setTexture(nextFrameConfig.key);
       }
     } else {
       // Action state active: reset timer and stay on frame 1 (default standing pose)
