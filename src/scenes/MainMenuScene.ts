@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { GAME_WIDTH, GAME_HEIGHT } from '../game/constants';
 import { HighScoreSystem } from '../systems/HighScoreSystem';
 import { showMenuGifBackground, hideMenuGifBackground } from '../ui/MenuGifBackground';
+import { hideGameplayGifBackground } from '../ui/GameplayGifBackground';
 
 const CX   = GAME_WIDTH / 2;
 const FONT = '"Courier New", Courier, monospace';
@@ -38,6 +39,7 @@ export class MainMenuScene extends Phaser.Scene {
   constructor() { super('MainMenuScene'); }
 
   create(): void {
+    hideGameplayGifBackground(); // ensure gameplay background is hidden on menu
     showMenuGifBackground();
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, hideMenuGifBackground, this);
     this.buildLogo();

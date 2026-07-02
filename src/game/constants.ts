@@ -6,7 +6,7 @@ export const GAME_HEIGHT = 1080;
 export const UPPER_LANE_Y  = 380;
 export const LOWER_LANE_Y  = 650;
 export const GROUND_Y      = 760;
-export const PLAYER_X      = 210;
+export const PLAYER_X      = 350;
 export const PLAYER_Y      = 515; // vertical midpoint between lanes
 export const ENEMY_AREA_X  = 1560;
 

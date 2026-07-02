@@ -16,12 +16,33 @@ export class Player {
   state:   PlayerState = PlayerState.Idle;
 
   // ── Visual ─────────────────────────────────────────────────────────────────
-  readonly sprite: Phaser.GameObjects.Rectangle;
+  readonly sprite: any;
 
   constructor(scene: Phaser.Scene) {
-    this.sprite = scene.add
-      .rectangle(PLAYER_X, PLAYER_Y, 52, 130, 0x00ccff)
-      .setDepth(10);
+    const hasPlayerSprite = scene.textures.exists('player_idle') &&
+      scene.textures.get('player_idle').get(0).realWidth > 2;
+
+    if (hasPlayerSprite) {
+      // Create sprite at target position (PLAYER_X, 860)
+      const spriteObj = scene.add.sprite(PLAYER_X, 860, 'player_idle')
+        .setOrigin(0.5, 1)
+        .setDepth(10);
+
+      // Scale player sprite to height of ~400px (preserve aspect ratio)
+      const targetHeight = 400;
+      const scale = targetHeight / spriteObj.height;
+      spriteObj.setScale(scale);
+      
+      // Face right
+      spriteObj.setFlipX(false);
+
+      this.sprite = spriteObj;
+    } else {
+      // Fallback placeholder rectangle
+      this.sprite = scene.add
+        .rectangle(PLAYER_X, PLAYER_Y, 52, 130, 0x00ccff)
+        .setDepth(10);
+    }
   }
 
   // ── Stamina helpers ────────────────────────────────────────────────────────
@@ -53,7 +74,11 @@ export class Player {
     this.hp = Math.max(this.hp - amount, 0);
     if (this.hp <= 0) {
       this.state = PlayerState.Dead;
-      this.sprite.setFillStyle(0x336666); // dim on death
+      if (typeof this.sprite.setFillStyle === 'function') {
+        this.sprite.setFillStyle(0x336666); // dim rectangle on death
+      } else if (typeof this.sprite.setTint === 'function') {
+        this.sprite.setTint(0x555555); // dim sprite on death
+      }
       return true;
     }
     this.state = PlayerState.Hit;

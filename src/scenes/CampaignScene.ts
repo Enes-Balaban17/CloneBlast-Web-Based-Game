@@ -27,6 +27,7 @@ import { ComboSystem }   from '../systems/ComboSystem';
 import { StageSystem }   from '../systems/StageSystem';
 import { WaveSystem }    from '../systems/WaveSystem';
 import { hideMenuGifBackground } from '../ui/MenuGifBackground';
+import { showGameplayGifBackground, hideGameplayGifBackground } from '../ui/GameplayGifBackground';
 
 // ── HUD constants ─────────────────────────────────────────────────────────────
 const BAR_X   = 20;
@@ -78,6 +79,12 @@ export class CampaignScene extends Phaser.Scene {
 
   create(data: GameSceneData): void {
     hideMenuGifBackground(); // ensure GIF layer is hidden before gameplay
+    showGameplayGifBackground(); // show gameplay background GIF
+
+    // Listen for scene shutdown/destroy to hide the gameplay GIF
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, hideGameplayGifBackground, this);
+    this.events.once(Phaser.Scenes.Events.DESTROY, hideGameplayGifBackground, this);
+
     this.mode            = data?.mode ?? 'campaign';
     this.blasters        = [];
     this.spawnTimer      = 0;
@@ -432,7 +439,8 @@ export class CampaignScene extends Phaser.Scene {
   // ════════════════════════════════════════════════════════════════════════════
 
   private buildBackground(): void {
-    this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, COL_BG);
+    // Set alpha to 0 so the HTML gameplay GIF background shows through
+    this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, COL_BG).setAlpha(0);
     this.add.rectangle(GAME_WIDTH / 2, UPPER_LANE_Y, GAME_WIDTH, 2, 0x1a2255, 0.8);
     this.add.rectangle(GAME_WIDTH / 2, LOWER_LANE_Y, GAME_WIDTH, 2, 0x1a2255, 0.8);
     this.add.rectangle(GAME_WIDTH / 2, GROUND_Y, GAME_WIDTH, 6, COL_GROUND);

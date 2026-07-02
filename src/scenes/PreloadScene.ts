@@ -51,15 +51,20 @@ export class PreloadScene extends Phaser.Scene {
   constructor() { super('PreloadScene'); }
 
   preload(): void {
-    // ── Main menu logo (ACTIVE — file: public/assets/ui/clone_blast_logo.png) ──
-    // Suppress Phaser's default error texture on failure so MainMenuScene
-    // can detect the missing file and fall back to styled text gracefully.
+    // ── Main menu logos (ACTIVE) ─────────────────────────────────────
+    // Preferred: trimmed version (994×443 visible-content only, 12 px margin)
+    // Fallback:  original full-canvas version (1536×1024, lots of transparent space)
+    // MainMenuScene picks whichever is available via logoTextureValid().
     this.load.on('loaderror', (file: { key: string }) => {
-      if (file.key === 'logo_main') {
-        console.warn('[PreloadScene] clone_blast_logo.png not found — text fallback will be used.');
+      if (file.key === 'logo_trimmed' || file.key === 'logo_main') {
+        console.warn(`[PreloadScene] ${file.key} not found — falling back to next option.`);
+      } else if (file.key === 'player_idle') {
+        console.warn('[PreloadScene] player_idle.png not found — using rectangle placeholder.');
       }
     });
-    this.load.image('logo_main', 'assets/ui/clone_blast_logo.png');
+    this.load.image('logo_trimmed', 'assets/ui/clone_blast_logo_trimmed.png');
+    this.load.image('logo_main',    'assets/ui/clone_blast_logo.png');
+    this.load.image('player_idle',  'assets/player/player_idle.png');
 
     // ── Other assets (uncomment when files are placed in public/assets/) ───────
 
