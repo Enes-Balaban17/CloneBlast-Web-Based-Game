@@ -19,29 +19,46 @@ export class Player {
   readonly sprite: any;
 
   constructor(scene: Phaser.Scene) {
-    const hasPlayerSprite = scene.textures.exists('player_idle') &&
+    const hasIdleAnim = scene.anims.exists('player_idle_anim');
+    const hasStaticSprite = scene.textures.exists('player_idle') &&
       scene.textures.get('player_idle').get(0).realWidth > 2;
 
-    if (hasPlayerSprite) {
-      // Create sprite at target position (PLAYER_X, 860)
+    if (hasIdleAnim) {
+      // 1. Animated player using the processed transparent frames
+      const spriteObj = scene.add.sprite(PLAYER_X, 860, 'player_idle_01')
+        .setOrigin(0.5, 1)
+        .setDepth(10);
+
+      // Play the idle animation
+      spriteObj.play('player_idle_anim');
+
+      // Scale player sprite to height of ~360px (preserve aspect ratio)
+      const targetHeight = 360;
+      const scale = targetHeight / spriteObj.height;
+      spriteObj.setScale(scale);
+      spriteObj.setFlipX(false);
+
+      this.sprite = spriteObj;
+      console.log('[Player] Created animated player sprite.');
+    } else if (hasStaticSprite) {
+      // 2. Fallback to static player_idle image
       const spriteObj = scene.add.sprite(PLAYER_X, 860, 'player_idle')
         .setOrigin(0.5, 1)
         .setDepth(10);
 
-      // Scale player sprite to height of ~400px (preserve aspect ratio)
-      const targetHeight = 400;
+      const targetHeight = 360;
       const scale = targetHeight / spriteObj.height;
       spriteObj.setScale(scale);
-      
-      // Face right
       spriteObj.setFlipX(false);
 
       this.sprite = spriteObj;
+      console.log('[Player] Created static player sprite.');
     } else {
-      // Fallback placeholder rectangle
+      // 3. Fallback to rectangle placeholder
       this.sprite = scene.add
         .rectangle(PLAYER_X, PLAYER_Y, 52, 130, 0x00ccff)
         .setDepth(10);
+      console.log('[Player] Created rectangle placeholder.');
     }
   }
 
@@ -78,6 +95,9 @@ export class Player {
         this.sprite.setFillStyle(0x336666); // dim rectangle on death
       } else if (typeof this.sprite.setTint === 'function') {
         this.sprite.setTint(0x555555); // dim sprite on death
+        if (typeof this.sprite.stop === 'function') {
+          this.sprite.stop(); // stop playing animations on death
+        }
       }
       return true;
     }

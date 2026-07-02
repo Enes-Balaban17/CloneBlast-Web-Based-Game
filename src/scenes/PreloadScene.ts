@@ -60,11 +60,19 @@ export class PreloadScene extends Phaser.Scene {
         console.warn(`[PreloadScene] ${file.key} not found — falling back to next option.`);
       } else if (file.key === 'player_idle') {
         console.warn('[PreloadScene] player_idle.png not found — using rectangle placeholder.');
+      } else if (file.key.startsWith('player_idle_') && file.key.endsWith('_raw')) {
+        console.warn(`[PreloadScene] Raw frame ${file.key} missing. Will fallback to static player or rectangle.`);
       }
     });
     this.load.image('logo_trimmed', 'assets/ui/clone_blast_logo_trimmed.png');
     this.load.image('logo_main',    'assets/ui/clone_blast_logo.png');
     this.load.image('player_idle',  'assets/player/player_idle.png');
+
+    // ── Raw player idle frames (white background to be removed at runtime) ────
+    this.load.image('player_idle_01_raw', 'assets/player/idle/player_idle_01.png');
+    this.load.image('player_idle_02_raw', 'assets/player/idle/player_idle_02.png');
+    this.load.image('player_idle_03_raw', 'assets/player/idle/player_idle_03.png');
+    this.load.image('player_idle_04_raw', 'assets/player/idle/player_idle_04.png');
 
     // ── Other assets (uncomment when files are placed in public/assets/) ───────
 
@@ -80,15 +88,95 @@ export class PreloadScene extends Phaser.Scene {
     // this.load.audio('sfx_force_reflect',   'assets/sfx/force_reflect.wav');
     // this.load.audio('sfx_force_choke',     'assets/sfx/force_choke.wav');
     // this.load.audio('sfx_boss_slash',      'assets/sfx/boss_slash.wav');
-    // this.load.audio('sfx_stage_clear',     'assets/sfx/stage_clear.wav');
+    // this.load.audio('sfx_stage_clear',     'assets/stage_clear.wav');
     // this.load.audio('music_menu',          'assets/music/theme_menu.ogg');
     // this.load.audio('music_campaign',      'assets/music/theme_campaign.ogg');
     // this.load.audio('music_boss',          'assets/music/theme_boss.ogg');
   }
 
   create(): void {
-    // All placeholder textures are generated in BootScene.
-    // Only real asset swaps happen here.
+    // Process the loaded raw frames to remove the pure white background pixels
+    this.processRawFrames();
+
+    // Create the animations if frames processed successfully
+    this.buildAnimations();
+
     this.scene.start('MainMenuScene');
+  }
+
+  private processRawFrames(): void {
+    const frames = ['01', '02', '03', '04'];
+    
+    frames.forEach(num => {
+      const rawKey = `player_idle_${num}_raw`;
+      const processedKey = `player_idle_${num}`;
+
+      if (this.textures.exists(rawKey)) {
+        try {
+          const texture = this.textures.get(rawKey);
+          const image = texture.getSourceImage() as HTMLImageElement | HTMLCanvasElement;
+          
+          const canvas = document.createElement('canvas');
+          canvas.width = image.width;
+          canvas.height = image.height;
+          const ctx = canvas.getContext('2d');
+          
+          if (ctx) {
+            ctx.drawImage(image, 0, 0);
+            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imgData.data;
+
+            // Loop through all pixels, converting near-white pixels (R, G, B >= 245) to alpha 0
+            for (let i = 0; i < data.length; i += 4) {
+              const r = data[i];
+              const g = data[i + 1];
+              const b = data[i + 2];
+              
+              if (r >= 245 && g >= 245 && b >= 245) {
+                data[i + 3] = 0; // Alpha transparent
+              }
+            }
+
+            ctx.putImageData(imgData, 0, 0);
+            
+            // Clean up any existing texture with the same name before saving
+            if (this.textures.exists(processedKey)) {
+              this.textures.remove(processedKey);
+            }
+            
+            this.textures.addCanvas(processedKey, canvas);
+            console.log(`[PreloadScene] Processed white background transparency for ${processedKey}`);
+          }
+        } catch (err) {
+          console.warn(`[PreloadScene] Failed to process white removal for ${rawKey}:`, err);
+        }
+      }
+    });
+  }
+
+  private buildAnimations(): void {
+    const hasAllFrames = 
+      this.textures.exists('player_idle_01') &&
+      this.textures.exists('player_idle_02') &&
+      this.textures.exists('player_idle_03') &&
+      this.textures.exists('player_idle_04');
+
+    if (hasAllFrames) {
+      if (!this.anims.exists('player_idle_anim')) {
+        this.anims.create({
+          key: 'player_idle_anim',
+          frames: [
+            { key: 'player_idle_01' },
+            { key: 'player_idle_02' },
+            { key: 'player_idle_03' },
+            { key: 'player_idle_04' }
+          ],
+          frameRate: 4,
+          repeat: -1,
+          yoyo: false
+        });
+        console.log('[PreloadScene] Registered animation: player_idle_anim');
+      }
+    }
   }
 }
