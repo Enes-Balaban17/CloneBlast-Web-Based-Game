@@ -89,18 +89,28 @@ export class PreloadScene extends Phaser.Scene {
     this.load.image('player_deflect_up_08_raw', 'assets/player/deflect_up/player_deflect_up_08.png');
 
     // ── Deflect up visual effect assets (green background chroma key) ──────────
-    console.log('[PreloadScene] Loading player deflect up effect assets...');
-    this.load.image('effect_slash_arc_up_raw',      'assets/effects/deflect_up/blue_slash_arc_up.png');
+    console.log('Loading Deflect Up effects...');
+    console.log('Trying effect path: /assets/player/deflect_up/');
     
-    // Load preferred spark assets
-    this.load.image('effect_deflect_spark_01_raw', 'assets/effects/deflect_up/blue_red_deflect_spark_01.png');
-    this.load.image('effect_deflect_spark_02_raw', 'assets/effects/deflect_up/blue_red_deflect_spark_02.png');
-    this.load.image('effect_deflect_spark_03_raw', 'assets/effects/deflect_up/blue_red_deflect_spark_03.png');
+    // 1. Try Player deflect_up folder
+    this.load.image('effect_slash_arc_up_raw_player',      'assets/player/deflect_up/blue_slash_arc_up.png');
+    this.load.image('effect_deflect_spark_01_raw_player',   'assets/player/deflect_up/blue_red_deflect_spark_01.png');
+    this.load.image('effect_deflect_spark_02_raw_player',   'assets/player/deflect_up/blue_red_deflect_spark_02.png');
+    this.load.image('effect_deflect_spark_03_raw_player',   'assets/player/deflect_up/blue_red_deflect_spark_03.png');
+    // Fallback: alt names in Player folder
+    this.load.image('effect_deflect_spark_01_alt_player',   'assets/player/deflect_up/blue_deflect_spark_01.png');
+    this.load.image('effect_deflect_spark_02_alt_player',   'assets/player/deflect_up/blue_deflect_spark_02.png');
+    this.load.image('effect_deflect_spark_03_alt_player',   'assets/player/deflect_up/blue_deflect_spark_03.png');
 
-    // Load fallback spark assets
-    this.load.image('effect_deflect_spark_01_alt', 'assets/effects/deflect_up/blue_deflect_spark_01.png');
-    this.load.image('effect_deflect_spark_02_alt', 'assets/effects/deflect_up/blue_deflect_spark_02.png');
-    this.load.image('effect_deflect_spark_03_alt', 'assets/effects/deflect_up/blue_deflect_spark_03.png');
+    // 2. Try Effects folder
+    this.load.image('effect_slash_arc_up_raw_effects',      'assets/effects/deflect_up/blue_slash_arc_up.png');
+    this.load.image('effect_deflect_spark_01_raw_effects',  'assets/effects/deflect_up/blue_red_deflect_spark_01.png');
+    this.load.image('effect_deflect_spark_02_raw_effects',  'assets/effects/deflect_up/blue_red_deflect_spark_02.png');
+    this.load.image('effect_deflect_spark_03_raw_effects',  'assets/effects/deflect_up/blue_red_deflect_spark_03.png');
+    // Fallback: alt names in Effects folder
+    this.load.image('effect_deflect_spark_01_alt_effects',  'assets/effects/deflect_up/blue_deflect_spark_01.png');
+    this.load.image('effect_deflect_spark_02_alt_effects',  'assets/effects/deflect_up/blue_deflect_spark_02.png');
+    this.load.image('effect_deflect_spark_03_alt_effects',  'assets/effects/deflect_up/blue_deflect_spark_03.png');
 
     // ── Other assets (uncomment when files are placed in public/assets/) ───────
 
@@ -150,19 +160,71 @@ export class PreloadScene extends Phaser.Scene {
     });
 
     // 3. Process Visual Effect Frames (Green-to-Alpha)
-    this.applyChromaKeyFilter('effect_slash_arc_up_raw', 'effect_slash_arc_up', 'green');
     
-    // Resolve Spark textures using preferred or alt keys
+    // Detect folder used
+    let folderUsed = '';
+    if (
+      this.textures.exists('effect_slash_arc_up_raw_player') ||
+      this.textures.exists('effect_deflect_spark_01_raw_player') ||
+      this.textures.exists('effect_deflect_spark_01_alt_player')
+    ) {
+      folderUsed = '/assets/player/deflect_up/';
+    } else if (
+      this.textures.exists('effect_slash_arc_up_raw_effects') ||
+      this.textures.exists('effect_deflect_spark_01_raw_effects') ||
+      this.textures.exists('effect_deflect_spark_01_alt_effects')
+    ) {
+      folderUsed = '/assets/effects/deflect_up/';
+    }
+
+    if (folderUsed) {
+      console.log(`[PreloadScene] Loaded effects from: ${folderUsed}`);
+    } else {
+      console.log('[PreloadScene] Trying effect path: /assets/player/deflect_up/');
+    }
+
+    // Resolve slash arc
+    const slashArcPlayer = 'effect_slash_arc_up_raw_player';
+    const slashArcEffects = 'effect_slash_arc_up_raw_effects';
+    if (this.textures.exists(slashArcPlayer)) {
+      this.applyChromaKeyFilter(slashArcPlayer, 'effect_slash_arc_up', 'green');
+      console.log('Loaded blue_slash_arc_up.png');
+    } else if (this.textures.exists(slashArcEffects)) {
+      this.applyChromaKeyFilter(slashArcEffects, 'effect_slash_arc_up', 'green');
+      console.log('Loaded blue_slash_arc_up.png');
+    } else {
+      console.warn('Missing slash arc effect');
+    }
+
+    // Resolve Sparks
     const sparks = ['01', '02', '03'];
     sparks.forEach(num => {
-      const rawKey = `effect_deflect_spark_${num}_raw`;
-      const altKey = `effect_deflect_spark_${num}_alt`;
+      const sparkP = `effect_deflect_spark_${num}_raw_player`;
+      const sparkE = `effect_deflect_spark_${num}_raw_effects`;
+      const sparkPAlt = `effect_deflect_spark_${num}_alt_player`;
+      const sparkEAlt = `effect_deflect_spark_${num}_alt_effects`;
       const processedKey = `effect_deflect_spark_${num}`;
 
-      if (this.textures.exists(rawKey)) {
-        this.applyChromaKeyFilter(rawKey, processedKey, 'green');
-      } else if (this.textures.exists(altKey)) {
-        this.applyChromaKeyFilter(altKey, processedKey, 'green');
+      let loaded = false;
+
+      if (this.textures.exists(sparkP)) {
+        this.applyChromaKeyFilter(sparkP, processedKey, 'green');
+        loaded = true;
+      } else if (this.textures.exists(sparkE)) {
+        this.applyChromaKeyFilter(sparkE, processedKey, 'green');
+        loaded = true;
+      } else if (this.textures.exists(sparkPAlt)) {
+        this.applyChromaKeyFilter(sparkPAlt, processedKey, 'green');
+        loaded = true;
+      } else if (this.textures.exists(sparkEAlt)) {
+        this.applyChromaKeyFilter(sparkEAlt, processedKey, 'green');
+        loaded = true;
+      }
+
+      if (loaded) {
+        console.log(`Loaded blue_red_deflect_spark_${num}.png`);
+      } else {
+        console.warn(`Missing spark ${num} effect`);
       }
     });
   }

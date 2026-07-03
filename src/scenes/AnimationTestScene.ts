@@ -6,17 +6,9 @@ import { hideMenuGifBackground } from '../ui/MenuGifBackground';
 
 const FONT = '"Courier New", Courier, monospace';
 
-// Effect positioning offsets
-const slashArcOffsetX = 0;
-const slashArcOffsetY = 0;
-const sparkOffsetX = 0;
-const sparkOffsetY = 0;
-
-// Config for sparks layout
-const USE_FULL_CANVAS_SPARKS = false; // if false, spark will align at sword contact point
-const sparkContactOffsetX = 0;
-const sparkContactOffsetY = -30; // slightly above contact point for aesthetic alignment
-const sparkScale = 1.0;
+// Optional tuning offsets
+const EFFECT_OFFSET_X = 0;
+const EFFECT_OFFSET_Y = 0;
 
 // Coordinates for test blaster path
 const BLASTER_START_X = 1600;
@@ -213,14 +205,15 @@ export class AnimationTestScene extends Phaser.Scene {
     });
   }
 
-  /** Spawn blue slash arc on frame 05 above player sprite (uses correct scaleX value). */
+  /** Spawn blue slash arc on frame 05 exactly matching player transform. */
   private spawnSlashArc(): void {
     const hasSlash = this.textures.exists('effect_slash_arc_up');
     if (hasSlash) {
-      const scaleVal = this.player.sprite.scaleX || 1.0;
-      this.slashArcSprite = this.add.image(PLAYER_X + slashArcOffsetX, 860 + slashArcOffsetY, 'effect_slash_arc_up')
+      const scaleXVal = this.player.sprite.scaleX || 1.0;
+      const scaleYVal = this.player.sprite.scaleY || 1.0;
+      this.slashArcSprite = this.add.image(PLAYER_X + EFFECT_OFFSET_X, 860 + EFFECT_OFFSET_Y, 'effect_slash_arc_up')
         .setOrigin(0.5, 1)
-        .setScale(scaleVal)
+        .setScale(scaleXVal, scaleYVal)
         .setDepth(11);
 
       // Hide/destroy slash arc after 120 ms
@@ -235,7 +228,7 @@ export class AnimationTestScene extends Phaser.Scene {
     }
   }
 
-  /** Spawn visual spark sequence centered over player or sword contact point. */
+  /** Spawn visual spark sequence exactly matching player transform (full-canvas alignment). */
   private spawnSparkSequence(): void {
     const hasSparks = this.textures.exists('effect_deflect_spark_01');
     if (!hasSparks) {
@@ -243,16 +236,12 @@ export class AnimationTestScene extends Phaser.Scene {
       return;
     }
 
-    const scaleVal = USE_FULL_CANVAS_SPARKS ? (this.player.sprite.scaleX || 1.0) : sparkScale;
-    const originX = USE_FULL_CANVAS_SPARKS ? 0.5 : 0.5;
-    const originY = USE_FULL_CANVAS_SPARKS ? 1.0 : 0.5;
+    const scaleXVal = this.player.sprite.scaleX || 1.0;
+    const scaleYVal = this.player.sprite.scaleY || 1.0;
 
-    const posX = USE_FULL_CANVAS_SPARKS ? (PLAYER_X + sparkOffsetX) : (BLASTER_CONTACT_X + sparkContactOffsetX);
-    const posY = USE_FULL_CANVAS_SPARKS ? (860 + sparkOffsetY) : (BLASTER_CONTACT_Y + sparkContactOffsetY);
-
-    this.sparkSprite = this.add.image(posX, posY, 'effect_deflect_spark_01')
-      .setOrigin(originX, originY)
-      .setScale(scaleVal)
+    this.sparkSprite = this.add.image(PLAYER_X + EFFECT_OFFSET_X, 860 + EFFECT_OFFSET_Y, 'effect_deflect_spark_01')
+      .setOrigin(0.5, 1)
+      .setScale(scaleXVal, scaleYVal)
       .setDepth(12);
 
     this.sparkFrameName = 'spark_01';
@@ -459,6 +448,16 @@ export class AnimationTestScene extends Phaser.Scene {
     const activeText = isActiveDeflect ? 'yes' : 'no';
     const exitText = isChainExit ? 'yes' : 'no';
     const contactText = this.contactReached ? 'yes' : 'no';
+    
+    const slashArcText = this.slashArcSprite ? 'ON' : 'OFF';
+
+    const hasEffects =
+      this.textures.exists('effect_slash_arc_up') &&
+      this.textures.exists('effect_deflect_spark_01') &&
+      this.textures.exists('effect_deflect_spark_02') &&
+      this.textures.exists('effect_deflect_spark_03');
+    
+    const texturesStatus = hasEffects ? 'OK' : 'MISSING';
 
     // Format shorter side-by-side variables to prevent overflow inside smaller card
     const textLines = [
@@ -467,7 +466,8 @@ export class AnimationTestScene extends Phaser.Scene {
       `Index : ${frameIndex}       | Buffer : ${buffered}`,
       `Demo  : ${this.demoActive ? 'ACTIVE' : 'IDLE'}     | Blaster: ${this.blasterState}`,
       `Spark : ${this.sparkFrameName} | Active : ${activeText}`,
-      `Contact: ${contactText}      | Chain  : ${exitText}`
+      `Contact: ${contactText}      | Chain  : ${exitText}`,
+      `Slash Arc: ${slashArcText}   | Textures: ${texturesStatus}`
     ];
 
     this.statusText.setText(textLines.join('\n'));
