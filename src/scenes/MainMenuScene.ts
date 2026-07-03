@@ -108,6 +108,50 @@ export class MainMenuScene extends Phaser.Scene {
       INFINITE_ICON_SCALE,
       () => { hideMenuGifBackground(); this.scene.start('InfiniteScene', { mode: 'infinite' }); }
     );
+
+    // Small Animation Test button positioned safely below high score panel at Y = 855
+    this.makeSmallMenuButton(
+      CX, 855,
+      '🧪 ANIMATION TEST',
+      0x00cc99, '#00ffcc',
+      () => { hideMenuGifBackground(); this.scene.start('AnimationTestScene'); }
+    );
+  }
+
+  private makeSmallMenuButton(
+    cx: number,
+    cy: number,
+    label: string,
+    borderHex: number,
+    accentCss: string,
+    cb: () => void
+  ): void {
+    const w = 340;
+    const h = 50;
+    const bx = cx - w / 2;
+    const by = cy - h / 2;
+    const gfx = this.add.graphics();
+
+    const drawNormal = () => {
+      gfx.clear();
+      gfx.fillStyle(0x0a0f1e, 0.85); gfx.fillRoundedRect(bx, by, w, h, 6);
+      gfx.lineStyle(1.5, borderHex, 0.5); gfx.strokeRoundedRect(bx, by, w, h, 6);
+    };
+    const drawHover = () => {
+      gfx.clear();
+      gfx.fillStyle(0x101830, 0.95); gfx.fillRoundedRect(bx, by, w, h, 6);
+      gfx.lineStyle(2.0, borderHex, 0.9); gfx.strokeRoundedRect(bx, by, w, h, 6);
+    };
+    drawNormal();
+
+    const txt = this.add.text(cx, cy, label, {
+      fontSize: '22px', fontFamily: FONT, color: '#ffffff', stroke: accentCss, strokeThickness: 2
+    }).setOrigin(0.5);
+
+    const zone = this.add.zone(cx, cy, w, h).setInteractive({ useHandCursor: true });
+    zone.on('pointerover',  () => { drawHover();  txt.setColor(accentCss); });
+    zone.on('pointerout',   () => { drawNormal(); txt.setColor('#ffffff'); });
+    zone.on('pointerdown',  cb);
   }
 
   private makeMenuButton(

@@ -294,6 +294,64 @@ export class Player {
     );
   }
 
+  // ── PlayerAnimationController Interface Methods ────────────────────────────
+
+  /** Force transition back to the slow idle loop, canceling any active actions. */
+  playIdle(): void {
+    if (this.state === PlayerState.Dead) return;
+    this.state = PlayerState.Idle;
+    this.activeAnimationSequence = null;
+    this.onActiveDeflectTriggerCallback = null;
+    this.onDeflectCompleteCallback = null;
+    this.idleFrameTimer = 0;
+    this.currentIdleFrameIndex = 0;
+    
+    const scene = this.sprite.scene;
+    if (this.hasIdleFramesLoaded(scene)) {
+      this.sprite.setTexture('player_idle_01');
+    }
+  }
+
+  /**
+   * Play an action animation by its string ID.
+   * Returns true if the action is available and successfully started.
+   */
+  playAction(animationId: string, onActiveFrame?: () => void, onComplete?: () => void): boolean {
+    if (this.state === PlayerState.Dead) return false;
+
+    if (animationId === 'deflect_up') {
+      this.playDeflectUp(onActiveFrame || (() => {}), onComplete || (() => {}));
+      return true;
+    }
+    
+    // Future action animations (deflect_down, reflect, force, etc.) can be hooked here.
+    return false;
+  }
+
+  /** Returns true if an action animation sequence is currently ticking. */
+  isActionPlaying(): boolean {
+    return this.activeAnimationSequence !== null;
+  }
+
+  /** Returns the name of the currently active animation. */
+  getCurrentAnimationName(): string {
+    if (this.state === PlayerState.Dead) return 'dead';
+    if (this.activeAnimationSequence === DEFLECT_UP_SEQUENCE) return 'deflect_up';
+    return 'idle';
+  }
+
+  /** Returns the texture key of the currently visible frame. */
+  getCurrentFrameKey(): string {
+    if (this.activeAnimationSequence) {
+      return this.activeAnimationSequence[this.currentAnimFrameIndex].key;
+    }
+    const scene = this.sprite.scene;
+    if (this.hasIdleFramesLoaded(scene)) {
+      return IDLE_SEQUENCE[this.currentIdleFrameIndex].key;
+    }
+    return 'player_idle';
+  }
+
   destroy(): void {
     this.sprite.destroy();
   }

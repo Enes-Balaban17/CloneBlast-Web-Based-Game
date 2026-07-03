@@ -7,6 +7,7 @@ import { CampaignScene }  from '../scenes/CampaignScene';
 import { InfiniteScene }  from '../scenes/InfiniteScene';
 import { GameOverScene }  from '../scenes/GameOverScene';
 import { NameEntryScene } from '../scenes/NameEntryScene';
+import { AnimationTestScene } from '../scenes/AnimationTestScene';
 
 export const gameConfig: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
@@ -32,5 +33,6 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
     InfiniteScene,
     GameOverScene,
     NameEntryScene,
+    AnimationTestScene,
   ],
 };
