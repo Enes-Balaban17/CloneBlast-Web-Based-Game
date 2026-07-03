@@ -6,21 +6,11 @@ import { hideMenuGifBackground } from '../ui/MenuGifBackground';
 
 const FONT = '"Courier New", Courier, monospace';
 
-const PLAYER_ANIMATION_TESTS = [
-  { id: 'idle',         label: 'Idle',         key: 'idle',         available: true,  loop: true },
-  { id: 'deflect_up',   label: 'Deflect Up',   key: 'deflect_up',   available: true,  loop: false },
-  { id: 'deflect_down', label: 'Deflect Down', key: 'deflect_down', available: false, loop: false },
-  { id: 'reflect',      label: 'Force Reflect',key: 'reflect',      available: false, loop: false },
-  { id: 'force',        label: 'Force Power',  key: 'force',        available: false, loop: false },
-];
-
 export class AnimationTestScene extends Phaser.Scene {
   private player!: Player;
   private statusText!: Phaser.GameObjects.Text;
   private messageText!: Phaser.GameObjects.Text;
   private messageTimer = 0;
-  private activeDeflectDetected = false;
-  private activeDeflectTimer = 0;
 
   // Key mappings
   private key1!: Phaser.Input.Keyboard.Key;
@@ -56,6 +46,21 @@ export class AnimationTestScene extends Phaser.Scene {
     // Setup player
     this.player = new Player(this);
 
+    // Register onChainExitCallback for buffering testing
+    this.player.onChainExitCallback = (actionId: string): boolean => {
+      if (actionId === 'deflect_up') {
+        const success = this.player.playAction('deflect_up');
+        if (success) {
+          this.showMessage('Buffering: Chained Deflect Up', '#00ff88');
+        }
+        return success;
+      }
+      
+      // If action is not available (deflect_down, reflect, force)
+      this.showMessage(`${this.formatActionLabel(actionId)} animation not available yet`, '#ff4444');
+      return false;
+    };
+
     // Setup UI elements
     this.buildUI();
 
@@ -69,22 +74,8 @@ export class AnimationTestScene extends Phaser.Scene {
     // Tick the player visual/animation timers
     this.player.update(time, delta);
 
-    // Handle keys and play logic once per press
+    // Handle keys and play/queue logic once per press
     this.handleKeyboardInputs();
-
-    // Check if player reaches active frame of deflect up (player_deflect_up_05)
-    const currentFrame = this.player.getCurrentFrameKey();
-    if (currentFrame === 'player_deflect_up_05') {
-      this.activeDeflectDetected = true;
-      this.activeDeflectTimer = 80; // keep feedback visible for the frame's duration
-    }
-
-    if (this.activeDeflectTimer > 0) {
-      this.activeDeflectTimer -= delta;
-      if (this.activeDeflectTimer <= 0) {
-        this.activeDeflectDetected = false;
-      }
-    }
 
     // Update message timer
     if (this.messageTimer > 0) {
@@ -188,7 +179,9 @@ export class AnimationTestScene extends Phaser.Scene {
       return;
     }
 
-    // 1 -> Idle
+    const actionPlaying = this.player.isActionPlaying();
+
+    // 1 -> Idle (resets buffer and goes to idle)
     if (Phaser.Input.Keyboard.JustDown(this.key1)) {
       this.player.playIdle();
       this.showMessage('Playing Idle animation', '#00ccff');
@@ -201,59 +194,98 @@ export class AnimationTestScene extends Phaser.Scene {
       Phaser.Input.Keyboard.JustDown(this.keyW) ||
       Phaser.Input.Keyboard.JustDown(this.keyUp)
     ) {
-      if (this.player.isActionPlaying()) return; // ignore repeated triggers
-      
-      const success = this.player.playAction('deflect_up');
-      if (success) {
-        this.showMessage('Playing Deflect Up', '#00ff88');
+      if (actionPlaying) {
+        this.player.queueAction('deflect_up');
+        this.showMessage('Buffered: Deflect Up', '#e5b800');
       } else {
-        this.showMessage('Deflect Up animation not available yet', '#ff4444');
+        const success = this.player.playAction('deflect_up');
+        if (success) {
+          this.showMessage('Playing Deflect Up', '#00ff88');
+        } else {
+          this.showMessage('Deflect Up animation not available yet', '#ff4444');
+        }
       }
       return;
     }
 
-    // 3 / S / Down -> Deflect Down (Unavailable)
+    // 3 / S / Down -> Deflect Down
     if (
       Phaser.Input.Keyboard.JustDown(this.key3) ||
       Phaser.Input.Keyboard.JustDown(this.keyS) ||
       Phaser.Input.Keyboard.JustDown(this.keyDown)
     ) {
-      this.showMessage('Deflect Down animation not available yet', '#ff4444');
+      if (actionPlaying) {
+        this.player.queueAction('deflect_down');
+        this.showMessage('Buffered: Deflect Down', '#e5b800');
+      } else {
+        this.showMessage('Deflect Down animation not available yet', '#ff4444');
+      }
       return;
     }
 
-    // 4 / D -> Force Reflect (Unavailable)
+    // 4 / D -> Force Reflect
     if (Phaser.Input.Keyboard.JustDown(this.key4) || Phaser.Input.Keyboard.JustDown(this.keyD)) {
-      this.showMessage('Force Reflect animation not available yet', '#ff4444');
+      if (actionPlaying) {
+        this.player.queueAction('reflect');
+        this.showMessage('Buffered: Force Reflect', '#e5b800');
+      } else {
+        this.showMessage('Force Reflect animation not available yet', '#ff4444');
+      }
       return;
     }
 
-    // 5 / Space -> Force Power (Unavailable)
+    // 5 / Space -> Force Power
     if (Phaser.Input.Keyboard.JustDown(this.key5) || Phaser.Input.Keyboard.JustDown(this.keySpace)) {
-      this.showMessage('Force Power animation not available yet', '#ff4444');
+      if (actionPlaying) {
+        this.player.queueAction('force');
+        this.showMessage('Buffered: Force Power', '#e5b800');
+      } else {
+        this.showMessage('Force Power animation not available yet', '#ff4444');
+      }
       return;
     }
   }
 
   private refreshUI(): void {
-    const animName = this.player.getCurrentAnimationName();
+    const action = this.player.getCurrentAction();
     const frameKey = this.player.getCurrentFrameKey();
-    const activeText = this.activeDeflectDetected ? '⚡ ACTIVE DEFLECT FRAME ⚡' : 'no';
+    const frameIndex = this.player.getCurrentFrameIndex();
+    const buffered = this.player.bufferedAction ? this.player.bufferedAction.toUpperCase() : 'NONE';
+    
+    // Status flag conditions
+    const isActiveDeflect = this.player.isCurrentFrameActiveDeflect();
+    const isChainExit = this.player.isCurrentFrameChainExit();
+    
+    const activeText = isActiveDeflect ? '⚡ ACTIVE DEFLECT FRAME ⚡' : 'no';
+    const exitText = isChainExit ? '🚪 CHAIN EXIT FRAME' : 'no';
 
     const textLines = [
-      `Anim: ${animName.toUpperCase()}`,
-      `Frame: ${frameKey}`,
+      `Action: ${action.toUpperCase()}`,
+      `Frame Key: ${frameKey}`,
+      `Frame Index: ${frameIndex}`,
+      `Buffered Action: ${buffered}`,
       `Active Deflect: ${activeText}`,
-      `Position: X=${this.player.sprite.x} Y=${this.player.sprite.y}`
+      `Chain Exit: ${exitText}`
     ];
 
     this.statusText.setText(textLines.join('\n'));
-    
-    if (this.activeDeflectDetected) {
+
+    // Visual feedback color changes
+    if (isActiveDeflect) {
       this.statusText.setColor('#00ff88');
+    } else if (isChainExit) {
+      this.statusText.setColor('#ffff00');
     } else {
       this.statusText.setColor('#ffffff');
     }
+  }
+
+  private formatActionLabel(actionId: string): string {
+    if (actionId === 'deflect_up') return 'Deflect Up';
+    if (actionId === 'deflect_down') return 'Deflect Down';
+    if (actionId === 'reflect') return 'Force Reflect';
+    if (actionId === 'force') return 'Force Power';
+    return actionId;
   }
 
   private showMessage(text: string, color: string): void {

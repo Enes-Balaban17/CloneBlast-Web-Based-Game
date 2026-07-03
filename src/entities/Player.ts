@@ -29,6 +29,7 @@ interface DeflectUpFrameConfig {
   key: string;
   duration: number;
   activeDeflect?: boolean;
+  chainExit?: boolean;
 }
 
 const DEFLECT_UP_SEQUENCE: DeflectUpFrameConfig[] = [
@@ -36,9 +37,9 @@ const DEFLECT_UP_SEQUENCE: DeflectUpFrameConfig[] = [
   { key: 'player_deflect_up_02', duration: 45 },
   { key: 'player_deflect_up_03', duration: 50 },
   { key: 'player_deflect_up_04', duration: 55 },
-  { key: 'player_deflect_up_05', duration: 80, activeDeflect: true },
+  { key: 'player_deflect_up_05', duration: 420, activeDeflect: true },
   { key: 'player_deflect_up_06', duration: 65 },
-  { key: 'player_deflect_up_07', duration: 60 },
+  { key: 'player_deflect_up_07', duration: 60, chainExit: true },
   { key: 'player_deflect_up_08', duration: 50 },
 ];
 
@@ -62,6 +63,10 @@ export class Player {
   private animTimer = 0;
   private onActiveDeflectTriggerCallback: (() => void) | null = null;
   private onDeflectCompleteCallback: (() => void) | null = null;
+
+  // ── Input Buffering System variables ───────────────────────────────────────
+  public bufferedAction: string | null = null;
+  public onChainExitCallback: ((actionId: string) => boolean) | null = null;
 
   constructor(scene: Phaser.Scene) {
     const hasIdleFrames = 
@@ -177,6 +182,7 @@ export class Player {
     if (this.hp <= 0) {
       this.state = PlayerState.Dead;
       this.activeAnimationSequence = null; // cancel active animation
+      this.clearBufferedAction();
       if (typeof this.sprite.setFillStyle === 'function') {
         this.sprite.setFillStyle(0x336666); // dim rectangle on death
       } else if (typeof this.sprite.setTint === 'function') {
@@ -189,6 +195,7 @@ export class Player {
     }
     this.state = PlayerState.Hit;
     this.activeAnimationSequence = null; // hit overrides animation
+    this.clearBufferedAction();
     return false;
   }
 
@@ -219,6 +226,24 @@ export class Player {
 
       if (this.animTimer >= currentFrameConfig.duration) {
         this.animTimer = 0;
+
+        // ── 1.1 Action Buffering chain exit check ────────────────────────────
+        if (currentFrameConfig.chainExit && this.bufferedAction) {
+          const nextAction = this.bufferedAction;
+          console.log(`[Player] Chain exit frame reached. Attempting to chain into: ${nextAction}`);
+          
+          if (this.onChainExitCallback) {
+            this.bufferedAction = null;
+            const chainSuccess = this.onChainExitCallback(nextAction);
+            if (chainSuccess) {
+              // The scene callback successfully initiated a new animation sequence (like deflect_up).
+              // We return instantly since the activeAnimationSequence was reset for the new action.
+              return;
+            }
+          }
+        }
+
+        // ── 1.2 Proceed to next animation frame ──────────────────────────────
         this.currentAnimFrameIndex++;
 
         if (this.currentAnimFrameIndex >= this.activeAnimationSequence.length) {
@@ -239,7 +264,7 @@ export class Player {
 
           if (completeCb) completeCb();
         } else {
-          // Switch to next animation frame
+          // Switch to next animation frame texture
           const nextFrameConfig = this.activeAnimationSequence[this.currentAnimFrameIndex];
           this.sprite.setTexture(nextFrameConfig.key);
 
@@ -303,6 +328,7 @@ export class Player {
     this.activeAnimationSequence = null;
     this.onActiveDeflectTriggerCallback = null;
     this.onDeflectCompleteCallback = null;
+    this.clearBufferedAction();
     this.idleFrameTimer = 0;
     this.currentIdleFrameIndex = 0;
     
@@ -328,13 +354,33 @@ export class Player {
     return false;
   }
 
+  /** Set bufferedAction to queue the next player input. */
+  queueAction(actionId: string): void {
+    if (['deflect_up', 'deflect_down', 'reflect', 'force'].includes(actionId)) {
+      this.bufferedAction = actionId;
+      console.log(`[Player] Action buffered: ${actionId}`);
+    }
+  }
+
+  /** Returns and clears the bufferedAction queue. */
+  consumeBufferedAction(): string | null {
+    const act = this.bufferedAction;
+    this.bufferedAction = null;
+    return act;
+  }
+
+  /** Resets the buffered action. */
+  clearBufferedAction(): void {
+    this.bufferedAction = null;
+  }
+
   /** Returns true if an action animation sequence is currently ticking. */
   isActionPlaying(): boolean {
     return this.activeAnimationSequence !== null;
   }
 
-  /** Returns the name of the currently active animation. */
-  getCurrentAnimationName(): string {
+  /** Returns the ID of the active action animation ('idle', 'deflect_up', etc.) */
+  getCurrentAction(): string {
     if (this.state === PlayerState.Dead) return 'dead';
     if (this.activeAnimationSequence === DEFLECT_UP_SEQUENCE) return 'deflect_up';
     return 'idle';
@@ -350,6 +396,30 @@ export class Player {
       return IDLE_SEQUENCE[this.currentIdleFrameIndex].key;
     }
     return 'player_idle';
+  }
+
+  /** Returns the current active frame index. */
+  getCurrentFrameIndex(): number {
+    if (this.activeAnimationSequence) {
+      return this.currentAnimFrameIndex;
+    }
+    return this.currentIdleFrameIndex;
+  }
+
+  /** Returns true if the active animation is currently in its activeDeflect window (frame 05). */
+  isCurrentFrameActiveDeflect(): boolean {
+    if (this.activeAnimationSequence) {
+      return !!this.activeAnimationSequence[this.currentAnimFrameIndex].activeDeflect;
+    }
+    return false;
+  }
+
+  /** Returns true if the active animation is currently on its chain exit frame (frame 07). */
+  isCurrentFrameChainExit(): boolean {
+    if (this.activeAnimationSequence) {
+      return !!this.activeAnimationSequence[this.currentAnimFrameIndex].chainExit;
+    }
+    return false;
   }
 
   destroy(): void {

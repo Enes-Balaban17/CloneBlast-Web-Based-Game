@@ -126,6 +126,44 @@ export class CampaignScene extends Phaser.Scene {
     this.buildBackground();
     this.player = new Player(this);
 
+    // Register action animation chaining handler
+    this.player.onChainExitCallback = (actionId: string): boolean => {
+      if (actionId === 'deflect_up') {
+        this.handleDeflect('upper');
+        return this.player.isActionPlaying();
+      }
+      if (actionId === 'deflect_down') {
+        this.handleDeflect('lower');
+        return this.player.isActionPlaying();
+      }
+      if (actionId === 'reflect') {
+        if (this.force.canReflect(this.player)) {
+          const reflected = this.force.doReflect(this.player, this.blasters);
+          if (reflected) {
+            this.player.state = PlayerState.ForceReflect;
+            this.score.addForceReflect();
+            this.showFeedback('FORCE REFLECT!', '#00ff99');
+            this.time.delayedCall(300, () => {
+              if (this.player.state === PlayerState.ForceReflect) {
+                this.player.state = PlayerState.Idle;
+              }
+            });
+            return true;
+          }
+        }
+        return false;
+      }
+      if (actionId === 'force') {
+        if (this.force.canStartChoke(this.player)) {
+          this.force.startChoke(this.player, this.time.now);
+          return true;
+        }
+        this.showFeedback('FORCE NOT FULL!', '#ff4444');
+        return false;
+      }
+      return false;
+    };
+
     // Restore carry-over score / force (between stages)
     if (data?.carryScore) this.score['score'] = data.carryScore;
     if (data?.carryForce) this.player.force = Math.min(data.carryForce, MAX_FORCE);
@@ -232,70 +270,86 @@ export class CampaignScene extends Phaser.Scene {
       return;
     }
 
-    // ── Force Choke (SPACE hold/release) ──────────────────────────────────────
-    if (this.keys.chokeJustDown()) {
-      if (this.force.canStartChoke(this.player)) {
-        this.force.startChoke(this.player, time);
-      } else {
-        this.showFeedback('FORCE NOT FULL!', '#ff4444');
+    // ── Input Buffering Queueing when animating ──────────────────────────────
+    if (this.player.isActionPlaying()) {
+      if (this.keys.deflectJustDown('upper')) {
+        this.player.queueAction('deflect_up');
       }
-    }
-
-    if (this.keys.chokeJustUp()) {
-      const fired = this.force.releaseChoke(this.player, time, this.blasters);
-      if (fired) {
-        this.blasters = this.blasters.filter(b => b.active);
-        this.score.addForceChoke();
-        this.showFeedback('FORCE CHOKE!', '#cc44ff');
-        this.cameras.main.shake(300, 0.008);
-
-        // Damage normal enemies with Force
-        if (this.mode === 'campaign' && this.waves) {
-          this.waves.applyForceDamage(2);
-        }
-
-        // Boss: Force Choke hits it
-        const boss = this.mode === 'campaign' && this.waves ? this.waves.getBoss() : null;
-        if (boss) {
-          const defeated = boss.receiveForceHit();
-          if (defeated) {
-            this.showFeedback('BOSS DEFEATED!', '#ffdd00');
-          }
-        }
-
-        this.spawnForceShockwave();
-        this.time.delayedCall(600, () => {
-          if (this.player.state === PlayerState.ForceChokeRelease) {
-            this.player.state = PlayerState.Idle;
-          }
-        });
+      if (this.keys.deflectJustDown('lower')) {
+        this.player.queueAction('deflect_down');
       }
-    }
+      if (this.keys.reflectJustDown()) {
+        this.player.queueAction('reflect');
+      }
+      if (this.keys.chokeJustDown()) {
+        this.player.queueAction('force');
+      }
+    } else {
+      // ── Force Choke (SPACE hold/release) ────────────────────────────────────
+      if (this.keys.chokeJustDown()) {
+        if (this.force.canStartChoke(this.player)) {
+          this.force.startChoke(this.player, time);
+        } else {
+          this.showFeedback('FORCE NOT FULL!', '#ff4444');
+        }
+      }
 
-    // ── Force Reflect (D key) ──────────────────────────────────────────────────
-    if (this.keys.reflectJustDown()) {
-      if (this.force.canReflect(this.player)) {
-        const reflected = this.force.doReflect(this.player, this.blasters);
-        if (reflected) {
-          this.player.state = PlayerState.ForceReflect;
-          this.score.addForceReflect();
-          this.showFeedback('FORCE REFLECT!', '#00ff99');
-          this.time.delayedCall(300, () => {
-            if (this.player.state === PlayerState.ForceReflect) {
+      if (this.keys.chokeJustUp()) {
+        const fired = this.force.releaseChoke(this.player, time, this.blasters);
+        if (fired) {
+          this.blasters = this.blasters.filter(b => b.active);
+          this.score.addForceChoke();
+          this.showFeedback('FORCE CHOKE!', '#cc44ff');
+          this.cameras.main.shake(300, 0.008);
+
+          // Damage normal enemies with Force
+          if (this.mode === 'campaign' && this.waves) {
+            this.waves.applyForceDamage(2);
+          }
+
+          // Boss: Force Choke hits it
+          const boss = this.mode === 'campaign' && this.waves ? this.waves.getBoss() : null;
+          if (boss) {
+            const defeated = boss.receiveForceHit();
+            if (defeated) {
+              this.showFeedback('BOSS DEFEATED!', '#ffdd00');
+            }
+          }
+
+          this.spawnForceShockwave();
+          this.time.delayedCall(600, () => {
+            if (this.player.state === PlayerState.ForceChokeRelease) {
               this.player.state = PlayerState.Idle;
             }
           });
-        } else {
-          this.showFeedback('NO TARGET!', '#ff8800');
         }
-      } else {
-        this.showFeedback(`NEED 25 FORCE (${Math.floor(this.player.force)})`, '#ff4444');
       }
-    }
 
-    // ── Deflect inputs ────────────────────────────────────────────────────────
-    if (this.keys.deflectJustDown('upper')) this.handleDeflect('upper');
-    if (this.keys.deflectJustDown('lower')) this.handleDeflect('lower');
+      // ── Force Reflect (D key) ────────────────────────────────────────────────
+      if (this.keys.reflectJustDown()) {
+        if (this.force.canReflect(this.player)) {
+          const reflected = this.force.doReflect(this.player, this.blasters);
+          if (reflected) {
+            this.player.state = PlayerState.ForceReflect;
+            this.score.addForceReflect();
+            this.showFeedback('FORCE REFLECT!', '#00ff99');
+            this.time.delayedCall(300, () => {
+              if (this.player.state === PlayerState.ForceReflect) {
+                this.player.state = PlayerState.Idle;
+              }
+            });
+          } else {
+            this.showFeedback('NO TARGET!', '#ff8800');
+          }
+        } else {
+          this.showFeedback(`NEED 25 FORCE (${Math.floor(this.player.force)})`, '#ff4444');
+        }
+      }
+
+      // ── Deflect inputs ──────────────────────────────────────────────────────
+      if (this.keys.deflectJustDown('upper')) this.handleDeflect('upper');
+      if (this.keys.deflectJustDown('lower')) this.handleDeflect('lower');
+    }
 
     // ── HUD ───────────────────────────────────────────────────────────────────
     this.redrawHUD();
