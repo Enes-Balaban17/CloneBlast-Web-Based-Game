@@ -25,6 +25,7 @@ const IDLE_SEQUENCE: IdleFrameConfig[] = [
 ];
 
 // Constants for custom deflect up animation timing (Option B manual controller)
+// Reference Pattern: See docs/PLAYER_ANIMATION_RULEBOOK.md for full specs
 interface DeflectUpFrameConfig {
   key: string;
   duration: number;
