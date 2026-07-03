@@ -91,9 +91,16 @@ export class PreloadScene extends Phaser.Scene {
     // ── Deflect up visual effect assets (green background chroma key) ──────────
     console.log('[PreloadScene] Loading player deflect up effect assets...');
     this.load.image('effect_slash_arc_up_raw',      'assets/effects/deflect_up/blue_slash_arc_up.png');
+    
+    // Load preferred spark assets
     this.load.image('effect_deflect_spark_01_raw', 'assets/effects/deflect_up/blue_red_deflect_spark_01.png');
     this.load.image('effect_deflect_spark_02_raw', 'assets/effects/deflect_up/blue_red_deflect_spark_02.png');
     this.load.image('effect_deflect_spark_03_raw', 'assets/effects/deflect_up/blue_red_deflect_spark_03.png');
+
+    // Load fallback spark assets
+    this.load.image('effect_deflect_spark_01_alt', 'assets/effects/deflect_up/blue_deflect_spark_01.png');
+    this.load.image('effect_deflect_spark_02_alt', 'assets/effects/deflect_up/blue_deflect_spark_02.png');
+    this.load.image('effect_deflect_spark_03_alt', 'assets/effects/deflect_up/blue_deflect_spark_03.png');
 
     // ── Other assets (uncomment when files are placed in public/assets/) ───────
 
@@ -143,10 +150,21 @@ export class PreloadScene extends Phaser.Scene {
     });
 
     // 3. Process Visual Effect Frames (Green-to-Alpha)
-    this.applyChromaKeyFilter('effect_slash_arc_up_raw',      'effect_slash_arc_up',      'green');
-    this.applyChromaKeyFilter('effect_deflect_spark_01_raw', 'effect_deflect_spark_01', 'green');
-    this.applyChromaKeyFilter('effect_deflect_spark_02_raw', 'effect_deflect_spark_02', 'green');
-    this.applyChromaKeyFilter('effect_deflect_spark_03_raw', 'effect_deflect_spark_03', 'green');
+    this.applyChromaKeyFilter('effect_slash_arc_up_raw', 'effect_slash_arc_up', 'green');
+    
+    // Resolve Spark textures using preferred or alt keys
+    const sparks = ['01', '02', '03'];
+    sparks.forEach(num => {
+      const rawKey = `effect_deflect_spark_${num}_raw`;
+      const altKey = `effect_deflect_spark_${num}_alt`;
+      const processedKey = `effect_deflect_spark_${num}`;
+
+      if (this.textures.exists(rawKey)) {
+        this.applyChromaKeyFilter(rawKey, processedKey, 'green');
+      } else if (this.textures.exists(altKey)) {
+        this.applyChromaKeyFilter(altKey, processedKey, 'green');
+      }
+    });
   }
 
   private applyChromaKeyFilter(rawKey: string, processedKey: string, filterMode: 'white' | 'green'): void {

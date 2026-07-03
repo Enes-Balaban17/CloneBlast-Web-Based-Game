@@ -6,11 +6,17 @@ import { hideMenuGifBackground } from '../ui/MenuGifBackground';
 
 const FONT = '"Courier New", Courier, monospace';
 
-// Configurable offsets for visual effects alignment (if not full-canvas aligned)
+// Effect positioning offsets
 const slashArcOffsetX = 0;
 const slashArcOffsetY = 0;
 const sparkOffsetX = 0;
 const sparkOffsetY = 0;
+
+// Config for sparks layout
+const USE_FULL_CANVAS_SPARKS = false; // if false, spark will align at sword contact point
+const sparkContactOffsetX = 0;
+const sparkContactOffsetY = -30; // slightly above contact point for aesthetic alignment
+const sparkScale = 1.0;
 
 // Coordinates for test blaster path
 const BLASTER_START_X = 1600;
@@ -24,13 +30,13 @@ export class AnimationTestScene extends Phaser.Scene {
   private messageText!: Phaser.GameObjects.Text;
   private messageTimer = 0;
 
-  // Demo visual states
+  // Demo / Animation state flags
   private demoActive = false;
   private contactReached = false;
   private blasterState = 'NONE';
   private sparkFrameName = 'NONE';
 
-  // Demo sprites/graphics
+  // Graphic / Sprite handles
   private testBlaster: Phaser.GameObjects.Graphics | null = null;
   private redirectedBlaster: Phaser.GameObjects.Graphics | null = null;
   private slashArcSprite: Phaser.GameObjects.Image | null = null;
@@ -59,7 +65,7 @@ export class AnimationTestScene extends Phaser.Scene {
     hideMenuGifBackground();
     showGameplayGifBackground();
 
-    // Lifecyle cleanup
+    // Lifecycle cleanups
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.cleanupDemo, this);
     this.events.once(Phaser.Scenes.Events.DESTROY, this.cleanupDemo, this);
 
@@ -72,14 +78,14 @@ export class AnimationTestScene extends Phaser.Scene {
 
     // Register onChainExitCallback for buffering testing
     this.player.onChainExitCallback = (actionId: string): boolean => {
+      this.cleanupDemoOnly();
+
       if (actionId === 'deflect_up') {
-        // Trigger a new demo cycle instantly
-        this.cleanupDemoOnly();
-        this.playDeflectUpDemo();
+        // By default, chain exit returns to playing plain deflect up
+        this.playPlainDeflectUp();
         return true;
       }
       
-      // If action is not available (deflect_down, reflect, force)
       this.showMessage(`${this.formatActionLabel(actionId)} animation not available yet`, '#ff4444');
       return false;
     };
@@ -112,6 +118,27 @@ export class AnimationTestScene extends Phaser.Scene {
     this.refreshUI();
   }
 
+  /** Plays the plain Deflect Up animation, spawning the slash arc on frame 05 but no blaster/sparks. */
+  private playPlainDeflectUp(): void {
+    this.demoActive = false;
+    this.contactReached = false;
+    this.blasterState = 'NONE';
+    this.sparkFrameName = 'NONE';
+
+    this.player.playAction(
+      'deflect_up',
+      // onActiveDeflect (frame 05 reached)
+      () => {
+        this.spawnSlashArc();
+      },
+      // onComplete
+      () => {
+        this.showMessage('Deflect Up Complete', '#ffffff');
+      }
+    );
+  }
+
+  /** Plays the full visual deflect up demo including incoming blaster and spark effects on contact. */
   private playDeflectUpDemo(): void {
     this.demoActive = true;
     this.contactReached = false;
@@ -124,7 +151,6 @@ export class AnimationTestScene extends Phaser.Scene {
       () => {
         this.contactReached = true;
         this.blasterState = 'CONTACT';
-        console.log('[AnimationTestScene] Deflect up active frame reached: player_deflect_up_05');
 
         // Destroy incoming blaster
         if (this.testBlaster) {
@@ -133,61 +159,10 @@ export class AnimationTestScene extends Phaser.Scene {
         }
 
         // Spawn visual Slash Arc
-        const hasSlash = this.textures.exists('effect_slash_arc_up');
-        if (hasSlash) {
-          this.slashArcSprite = this.add.image(PLAYER_X + slashArcOffsetX, 860 + slashArcOffsetY, 'effect_slash_arc_up')
-            .setOrigin(0.5, 1)
-            .setScale(this.player.sprite.scale)
-            .setDepth(11);
-
-          // Hide/destroy slash arc after 120 ms
-          this.time.delayedCall(120, () => {
-            if (this.slashArcSprite) {
-              this.slashArcSprite.destroy();
-              this.slashArcSprite = null;
-            }
-          });
-        } else {
-          console.warn('[AnimationTestScene] Using fallback because effect_slash_arc_up texture is missing');
-        }
+        this.spawnSlashArc();
 
         // Spawn visual Sparks animation
-        const hasSparks = this.textures.exists('effect_deflect_spark_01');
-        if (hasSparks) {
-          this.sparkSprite = this.add.image(PLAYER_X + sparkOffsetX, 860 + sparkOffsetY, 'effect_deflect_spark_01')
-            .setOrigin(0.5, 1)
-            .setScale(this.player.sprite.scale)
-            .setDepth(12);
-
-          this.sparkFrameName = 'spark_01';
-
-          // Spark 01: 45 ms
-          this.time.delayedCall(45, () => {
-            if (this.sparkSprite) {
-              this.sparkSprite.setTexture('effect_deflect_spark_02');
-              this.sparkFrameName = 'spark_02';
-            }
-          });
-
-          // Spark 02: 45 + 60 = 105 ms
-          this.time.delayedCall(105, () => {
-            if (this.sparkSprite) {
-              this.sparkSprite.setTexture('effect_deflect_spark_03');
-              this.sparkFrameName = 'spark_03';
-            }
-          });
-
-          // Spark 03: 105 + 55 = 160 ms
-          this.time.delayedCall(160, () => {
-            if (this.sparkSprite) {
-              this.sparkSprite.destroy();
-              this.sparkSprite = null;
-              this.sparkFrameName = 'NONE';
-            }
-          });
-        } else {
-          console.warn('[AnimationTestScene] Using fallback because spark textures are missing');
-        }
+        this.spawnSparkSequence();
 
         // Spawn visual redirected blaster bolt moving upward-right
         this.blasterState = 'REDIRECTED';
@@ -238,12 +213,82 @@ export class AnimationTestScene extends Phaser.Scene {
     });
   }
 
+  /** Spawn blue slash arc on frame 05 above player sprite (uses correct scaleX value). */
+  private spawnSlashArc(): void {
+    const hasSlash = this.textures.exists('effect_slash_arc_up');
+    if (hasSlash) {
+      const scaleVal = this.player.sprite.scaleX || 1.0;
+      this.slashArcSprite = this.add.image(PLAYER_X + slashArcOffsetX, 860 + slashArcOffsetY, 'effect_slash_arc_up')
+        .setOrigin(0.5, 1)
+        .setScale(scaleVal)
+        .setDepth(11);
+
+      // Hide/destroy slash arc after 120 ms
+      this.time.delayedCall(120, () => {
+        if (this.slashArcSprite) {
+          this.slashArcSprite.destroy();
+          this.slashArcSprite = null;
+        }
+      });
+    } else {
+      console.warn('[AnimationTestScene] Slash arc texture missing');
+    }
+  }
+
+  /** Spawn visual spark sequence centered over player or sword contact point. */
+  private spawnSparkSequence(): void {
+    const hasSparks = this.textures.exists('effect_deflect_spark_01');
+    if (!hasSparks) {
+      console.warn('[AnimationTestScene] Spark textures missing');
+      return;
+    }
+
+    const scaleVal = USE_FULL_CANVAS_SPARKS ? (this.player.sprite.scaleX || 1.0) : sparkScale;
+    const originX = USE_FULL_CANVAS_SPARKS ? 0.5 : 0.5;
+    const originY = USE_FULL_CANVAS_SPARKS ? 1.0 : 0.5;
+
+    const posX = USE_FULL_CANVAS_SPARKS ? (PLAYER_X + sparkOffsetX) : (BLASTER_CONTACT_X + sparkContactOffsetX);
+    const posY = USE_FULL_CANVAS_SPARKS ? (860 + sparkOffsetY) : (BLASTER_CONTACT_Y + sparkContactOffsetY);
+
+    this.sparkSprite = this.add.image(posX, posY, 'effect_deflect_spark_01')
+      .setOrigin(originX, originY)
+      .setScale(scaleVal)
+      .setDepth(12);
+
+    this.sparkFrameName = 'spark_01';
+
+    // Spark 01: 45 ms
+    this.time.delayedCall(45, () => {
+      if (this.sparkSprite) {
+        this.sparkSprite.setTexture('effect_deflect_spark_02');
+        this.sparkFrameName = 'spark_02';
+      }
+    });
+
+    // Spark 02: 45 + 60 = 105 ms
+    this.time.delayedCall(105, () => {
+      if (this.sparkSprite) {
+        this.sparkSprite.setTexture('effect_deflect_spark_03');
+        this.sparkFrameName = 'spark_03';
+      }
+    });
+
+    // Spark 03: 105 + 55 = 160 ms
+    this.time.delayedCall(160, () => {
+      if (this.sparkSprite) {
+        this.sparkSprite.destroy();
+        this.sparkSprite = null;
+        this.sparkFrameName = 'NONE';
+      }
+    });
+  }
+
   private buildUI(): void {
-    // Title Panel background card
+    // Title Panel background card (h=410, w=380 - tighter and smaller to prevent overflow)
     const cardX = 30;
     const cardY = 30;
-    const cardW = 460;
-    const cardH = 460;
+    const cardW = 380;
+    const cardH = 410;
     
     const gfx = this.add.graphics();
     gfx.fillStyle(0x050912, 0.85);
@@ -251,35 +296,35 @@ export class AnimationTestScene extends Phaser.Scene {
     gfx.lineStyle(1.5, 0x00ccff, 0.3);
     gfx.strokeRoundedRect(cardX, cardY, cardW, cardH, 8);
 
-    // Title label
-    this.add.text(cardX + 20, cardY + 20, '🤖 ANIMATION TEST', {
-      fontSize: '28px', fontFamily: FONT, color: '#ffb833', fontStyle: 'bold'
+    // Title label (Font size: 24px)
+    this.add.text(cardX + 20, cardY + 15, '🤖 ANIMATION TEST', {
+      fontSize: '24px', fontFamily: FONT, color: '#ffb833', fontStyle: 'bold'
     });
 
-    // Instructions/Guides
+    // Instructions/Guides (Font size: 15px, Line spacing: 23px)
     const guides = [
-      '1         : Play Idle',
-      '2 / W / ↑ : Deflect Up Demo',
+      '1         : Idle',
+      '2 / W     : Deflect Up',
+      '↑         : Deflect Up Demo',
       '3 / S / ↓ : Deflect Down',
       '4 / D     : Force Reflect',
       '5 / Space : Force Power',
-      'R         : Reset Idle',
-      'ESC       : Back to Main Menu'
+      'R : Reset | ESC : Back'
     ];
 
     guides.forEach((text, i) => {
-      this.add.text(cardX + 20, cardY + 70 + i * 28, text, {
-        fontSize: '18px', fontFamily: FONT, color: '#8899aa'
+      this.add.text(cardX + 20, cardY + 55 + i * 23, text, {
+        fontSize: '15px', fontFamily: FONT, color: '#8899aa'
       });
     });
 
-    // Divider line
+    // Divider line at Y = 225
     gfx.lineStyle(1, 0x334466, 0.5);
-    gfx.lineBetween(cardX + 20, cardY + 280, cardX + cardW - 20, cardY + 280);
+    gfx.lineBetween(cardX + 20, cardY + 225, cardX + cardW - 20, cardY + 225);
 
-    // Live state status text
-    this.statusText = this.add.text(cardX + 20, cardY + 295, '', {
-      fontSize: '18px', fontFamily: FONT, color: '#ffffff', lineSpacing: 6
+    // Live state status text (Font size: 14px, Line spacing: 19px, compact dual column layout)
+    this.statusText = this.add.text(cardX + 20, cardY + 238, '', {
+      fontSize: '14px', fontFamily: FONT, color: '#ffffff', lineSpacing: 5
     });
 
     // Alert feedback message text (middle bottom)
@@ -331,7 +376,7 @@ export class AnimationTestScene extends Phaser.Scene {
 
     const actionPlaying = this.player.isActionPlaying();
 
-    // 1 -> Idle (resets buffer and goes to idle)
+    // 1 -> Idle
     if (Phaser.Input.Keyboard.JustDown(this.key1)) {
       this.cleanupDemoOnly();
       this.player.playIdle();
@@ -339,15 +384,23 @@ export class AnimationTestScene extends Phaser.Scene {
       return;
     }
 
-    // 2 / W / Up -> Deflect Up Demo
-    if (
-      Phaser.Input.Keyboard.JustDown(this.key2) ||
-      Phaser.Input.Keyboard.JustDown(this.keyW) ||
-      Phaser.Input.Keyboard.JustDown(this.keyUp)
-    ) {
+    // 2 / W -> plain Deflect Up (no blaster)
+    if (Phaser.Input.Keyboard.JustDown(this.key2) || Phaser.Input.Keyboard.JustDown(this.keyW)) {
       if (actionPlaying) {
         this.player.queueAction('deflect_up');
         this.showMessage('Buffered: Deflect Up', '#e5b800');
+      } else {
+        this.showMessage('Playing Deflect Up', '#00ff88');
+        this.playPlainDeflectUp();
+      }
+      return;
+    }
+
+    // ArrowUp -> Deflect Up Demo (with blaster and sparks)
+    if (Phaser.Input.Keyboard.JustDown(this.keyUp)) {
+      if (actionPlaying) {
+        this.player.queueAction('deflect_up');
+        this.showMessage('Buffered: Deflect Up Demo', '#e5b800');
       } else {
         this.showMessage('Deflect Up Demo Started', '#00ff88');
         this.playDeflectUpDemo();
@@ -403,27 +456,23 @@ export class AnimationTestScene extends Phaser.Scene {
     const isActiveDeflect = this.player.isCurrentFrameActiveDeflect();
     const isChainExit = this.player.isCurrentFrameChainExit();
     
-    const activeText = isActiveDeflect ? '⚡ ACTIVE DEFLECT FRAME ⚡' : 'no';
-    const exitText = isChainExit ? '🚪 CHAIN EXIT FRAME' : 'no';
-    
-    const contactText = this.contactReached ? '💥 BLASTER CONTACT 💥' : 'no';
+    const activeText = isActiveDeflect ? 'yes' : 'no';
+    const exitText = isChainExit ? 'yes' : 'no';
+    const contactText = this.contactReached ? 'yes' : 'no';
 
+    // Format shorter side-by-side variables to prevent overflow inside smaller card
     const textLines = [
       `Action: ${action.toUpperCase()}`,
-      `Frame Key: ${frameKey}`,
-      `Frame Index: ${frameIndex}`,
-      `Buffered Action: ${buffered}`,
-      `Demo State: ${this.demoActive ? 'ACTIVE' : 'IDLE'}`,
-      `Blaster State: ${this.blasterState}`,
-      `Spark Frame: ${this.sparkFrameName}`,
-      `Active Deflect: ${activeText}`,
-      `Blaster Contact: ${contactText}`,
-      `Chain Exit: ${exitText}`
+      `Frame : ${frameKey}`,
+      `Index : ${frameIndex}       | Buffer : ${buffered}`,
+      `Demo  : ${this.demoActive ? 'ACTIVE' : 'IDLE'}     | Blaster: ${this.blasterState}`,
+      `Spark : ${this.sparkFrameName} | Active : ${activeText}`,
+      `Contact: ${contactText}      | Chain  : ${exitText}`
     ];
 
     this.statusText.setText(textLines.join('\n'));
 
-    // Visual feedback color changes
+    // Highlight card outline glow or color based on state
     if (isActiveDeflect) {
       this.statusText.setColor('#00ff88');
     } else if (isChainExit) {
