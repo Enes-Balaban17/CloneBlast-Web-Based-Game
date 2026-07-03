@@ -6,20 +6,24 @@ import { hideMenuGifBackground } from '../ui/MenuGifBackground';
 
 const FONT = '"Courier New", Courier, monospace';
 
-// Deflect Up visual effect alignment offsets (from user settings)
+// Deflect Up visual effect alignment offsets (tweakable live!)
 const DEFLECT_UP_ALIGNMENT = {
-  slashArcOffsetX: 45,
+  slashArcOffsetX: 30,
   slashArcOffsetY: -65,
 
-  sparkOffsetX: 20,
-  sparkOffsetY: -30,
+  sparkOffsetX: 8,
+  sparkOffsetY: -10,
 
-  blasterTargetOffsetX: 20,
-  blasterTargetOffsetY: -35,
+  blasterTargetOffsetX: 8,
+  blasterTargetOffsetY: -10,
 
   blasterStartX: 1700,
-  blasterStartYOffset: -35,
+  blasterStartYOffset: 0,
 };
+
+// Optional effect scaling multipliers
+let slashArcScaleMultiplier = 1.0;
+let sparkScaleMultiplier = 1.0;
 
 // Toggle for deflect contact point crosshair debug marker
 const SHOW_DEFLECT_UP_CONTACT_DEBUG = false;
@@ -57,6 +61,17 @@ export class AnimationTestScene extends Phaser.Scene {
   private keySpace!: Phaser.Input.Keyboard.Key;
   private keyR!: Phaser.Input.Keyboard.Key;
   private keyEsc!: Phaser.Input.Keyboard.Key;
+
+  // Live Tuning Keys
+  private keyShift!: Phaser.Input.Keyboard.Key;
+  private keyNum4!: Phaser.Input.Keyboard.Key;
+  private keyNum6!: Phaser.Input.Keyboard.Key;
+  private keyNum8!: Phaser.Input.Keyboard.Key;
+  private keyNum2!: Phaser.Input.Keyboard.Key;
+  private keyI!: Phaser.Input.Keyboard.Key;
+  private keyK!: Phaser.Input.Keyboard.Key;
+  private keyJ!: Phaser.Input.Keyboard.Key;
+  private keyL!: Phaser.Input.Keyboard.Key;
 
   constructor() {
     super('AnimationTestScene');
@@ -133,6 +148,11 @@ export class AnimationTestScene extends Phaser.Scene {
 
   /** Render debug crosshair marker at the contact point. */
   private drawDebugMarker(): void {
+    if (this.debugMarker) {
+      this.debugMarker.destroy();
+      this.debugMarker = null;
+    }
+
     if (!SHOW_DEFLECT_UP_CONTACT_DEBUG) return;
 
     const contact = this.getDeflectUpContactPoint();
@@ -204,8 +224,8 @@ export class AnimationTestScene extends Phaser.Scene {
 
         this.tweens.add({
           targets: this.redirectedBlaster,
-          x: contactPoint.x + 280,
-          y: contactPoint.y - 200,
+          x: contactPoint.x + 150, // x += 150
+          y: contactPoint.y - 150, // y -= 150 (upward-right vector)
           duration: 160,
           onComplete: () => {
             if (this.redirectedBlaster) {
@@ -253,8 +273,8 @@ export class AnimationTestScene extends Phaser.Scene {
   private spawnSlashArc(): void {
     const hasSlash = this.textures.exists('effect_slash_arc_up');
     if (hasSlash) {
-      const scaleXVal = this.player.sprite.scaleX || 1.0;
-      const scaleYVal = this.player.sprite.scaleY || 1.0;
+      const scaleXVal = (this.player.sprite.scaleX || 1.0) * slashArcScaleMultiplier;
+      const scaleYVal = (this.player.sprite.scaleY || 1.0) * slashArcScaleMultiplier;
       
       const posX = PLAYER_X + DEFLECT_UP_ALIGNMENT.slashArcOffsetX;
       const posY = 860 + DEFLECT_UP_ALIGNMENT.slashArcOffsetY;
@@ -284,8 +304,8 @@ export class AnimationTestScene extends Phaser.Scene {
       return;
     }
 
-    const scaleXVal = this.player.sprite.scaleX || 1.0;
-    const scaleYVal = this.player.sprite.scaleY || 1.0;
+    const scaleXVal = (this.player.sprite.scaleX || 1.0) * sparkScaleMultiplier;
+    const scaleYVal = (this.player.sprite.scaleY || 1.0) * sparkScaleMultiplier;
 
     // Apply offset directly to contactPoint coordinates for exact alignment
     const posX = contactPoint.x + DEFLECT_UP_ALIGNMENT.sparkOffsetX;
@@ -398,6 +418,17 @@ export class AnimationTestScene extends Phaser.Scene {
     this.keySpace = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
     this.keyR = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.R);
     this.keyEsc = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
+
+    // Live Tuning Keys
+    this.keyShift = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT);
+    this.keyNum4 = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.NUMPAD_FOUR);
+    this.keyNum6 = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.NUMPAD_SIX);
+    this.keyNum8 = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.NUMPAD_EIGHT);
+    this.keyNum2 = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.NUMPAD_TWO);
+    this.keyI = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.I);
+    this.keyK = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.K);
+    this.keyJ = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.J);
+    this.keyL = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.L);
   }
 
   private handleKeyboardInputs(): void {
@@ -485,6 +516,55 @@ export class AnimationTestScene extends Phaser.Scene {
       }
       return;
     }
+
+    // ── Live Offset Tuning logic ─────────────────────────────────────────────
+    const isShift = this.keyShift.isDown;
+    
+    if (!isShift) {
+      // Tune Slash Arc offsets (J/L/I/K or Num4/6/8/2)
+      if (Phaser.Input.Keyboard.JustDown(this.keyNum4) || Phaser.Input.Keyboard.JustDown(this.keyJ)) {
+        DEFLECT_UP_ALIGNMENT.slashArcOffsetX -= 1;
+        this.showMessage(`Slash Arc X Offset: ${DEFLECT_UP_ALIGNMENT.slashArcOffsetX}`, '#ffff00');
+      }
+      if (Phaser.Input.Keyboard.JustDown(this.keyNum6) || Phaser.Input.Keyboard.JustDown(this.keyL)) {
+        DEFLECT_UP_ALIGNMENT.slashArcOffsetX += 1;
+        this.showMessage(`Slash Arc X Offset: ${DEFLECT_UP_ALIGNMENT.slashArcOffsetX}`, '#ffff00');
+      }
+      if (Phaser.Input.Keyboard.JustDown(this.keyNum8) || Phaser.Input.Keyboard.JustDown(this.keyI)) {
+        DEFLECT_UP_ALIGNMENT.slashArcOffsetY -= 1;
+        this.showMessage(`Slash Arc Y Offset: ${DEFLECT_UP_ALIGNMENT.slashArcOffsetY}`, '#ffff00');
+      }
+      if (Phaser.Input.Keyboard.JustDown(this.keyNum2) || Phaser.Input.Keyboard.JustDown(this.keyK)) {
+        DEFLECT_UP_ALIGNMENT.slashArcOffsetY += 1;
+        this.showMessage(`Slash Arc Y Offset: ${DEFLECT_UP_ALIGNMENT.slashArcOffsetY}`, '#ffff00');
+      }
+    } else {
+      // Tune Spark & Blaster Target offsets (J/L/I/K or Num4/6/8/2 with Shift held)
+      if (Phaser.Input.Keyboard.JustDown(this.keyNum4) || Phaser.Input.Keyboard.JustDown(this.keyJ)) {
+        DEFLECT_UP_ALIGNMENT.sparkOffsetX -= 1;
+        DEFLECT_UP_ALIGNMENT.blasterTargetOffsetX -= 1;
+        this.showMessage(`Spark/Trg X Offset: ${DEFLECT_UP_ALIGNMENT.sparkOffsetX}`, '#00ff88');
+        this.drawDebugMarker();
+      }
+      if (Phaser.Input.Keyboard.JustDown(this.keyNum6) || Phaser.Input.Keyboard.JustDown(this.keyL)) {
+        DEFLECT_UP_ALIGNMENT.sparkOffsetX += 1;
+        DEFLECT_UP_ALIGNMENT.blasterTargetOffsetX += 1;
+        this.showMessage(`Spark/Trg X Offset: ${DEFLECT_UP_ALIGNMENT.sparkOffsetX}`, '#00ff88');
+        this.drawDebugMarker();
+      }
+      if (Phaser.Input.Keyboard.JustDown(this.keyNum8) || Phaser.Input.Keyboard.JustDown(this.keyI)) {
+        DEFLECT_UP_ALIGNMENT.sparkOffsetY -= 1;
+        DEFLECT_UP_ALIGNMENT.blasterTargetOffsetY -= 1;
+        this.showMessage(`Spark/Trg Y Offset: ${DEFLECT_UP_ALIGNMENT.sparkOffsetY}`, '#00ff88');
+        this.drawDebugMarker();
+      }
+      if (Phaser.Input.Keyboard.JustDown(this.keyNum2) || Phaser.Input.Keyboard.JustDown(this.keyK)) {
+        DEFLECT_UP_ALIGNMENT.sparkOffsetY += 1;
+        DEFLECT_UP_ALIGNMENT.blasterTargetOffsetY += 1;
+        this.showMessage(`Spark/Trg Y Offset: ${DEFLECT_UP_ALIGNMENT.sparkOffsetY}`, '#00ff88');
+        this.drawDebugMarker();
+      }
+    }
   }
 
   private refreshUI(): void {
@@ -515,6 +595,7 @@ export class AnimationTestScene extends Phaser.Scene {
     const slashOffset = `(${DEFLECT_UP_ALIGNMENT.slashArcOffsetX},${DEFLECT_UP_ALIGNMENT.slashArcOffsetY})`;
     const sparkOffset = `(${DEFLECT_UP_ALIGNMENT.sparkOffsetX},${DEFLECT_UP_ALIGNMENT.sparkOffsetY})`;
     const targetOffset = `(${DEFLECT_UP_ALIGNMENT.blasterTargetOffsetX},${DEFLECT_UP_ALIGNMENT.blasterTargetOffsetY})`;
+    const startYVal = contact.y + DEFLECT_UP_ALIGNMENT.blasterStartYOffset;
 
     // Format shorter side-by-side variables to prevent overflow inside smaller card
     const textLines = [
@@ -526,6 +607,7 @@ export class AnimationTestScene extends Phaser.Scene {
       `Contact: ${contactText}      | Chain  : ${exitText}`,
       `Slash Arc: ${slashArcText}   | Textures: ${texturesStatus}`,
       `Contact: X=${Math.floor(contact.x)} Y=${Math.floor(contact.y)}`,
+      `StartY : Y=${Math.floor(startYVal)}  | TargetY: Y=${Math.floor(contact.y)}`,
       `Offsets: Arc=${slashOffset} Spark=${sparkOffset} Trg=${targetOffset}`
     ];
 
