@@ -223,10 +223,70 @@ export class PreloadScene extends Phaser.Scene {
 
       if (loaded) {
         console.log(`Loaded blue_red_deflect_spark_${num}.png`);
+        
+        // Scan visible bounds to find the anchor
+        const anchor = this.calculateVisibleBoundsCenter(processedKey);
+        if (anchor) {
+          this.registry.set(`spark_anchor_${num}`, anchor);
+          console.log(`[PreloadScene] Stored spark_anchor_${num}: x=${anchor.x.toFixed(4)}, y=${anchor.y.toFixed(4)}`);
+        }
       } else {
         console.warn(`Missing spark ${num} effect`);
       }
     });
+  }
+
+  private calculateVisibleBoundsCenter(textureKey: string): { x: number; y: number } | null {
+    if (!this.textures.exists(textureKey)) return null;
+
+    try {
+      const texture = this.textures.get(textureKey);
+      const canvas = texture.getSourceImage() as HTMLCanvasElement;
+      if (!canvas || !canvas.getContext) return null;
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return null;
+
+      const width = canvas.width;
+      const height = canvas.height;
+      const imageData = ctx.getImageData(0, 0, width, height);
+      const data = imageData.data;
+
+      let minX = width;
+      let maxX = 0;
+      let minY = height;
+      let maxY = 0;
+      let found = false;
+
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const idx = (y * width + x) * 4;
+          const alpha = data[idx + 3];
+          if (alpha > 10) {
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+            found = true;
+          }
+        }
+      }
+
+      if (!found) {
+        return { x: 0.5, y: 0.5 };
+      }
+
+      const visibleCenterX = (minX + maxX) / 2;
+      const visibleCenterY = (minY + maxY) / 2;
+
+      return {
+        x: visibleCenterX / width,
+        y: visibleCenterY / height
+      };
+    } catch (e) {
+      console.error(`[PreloadScene] Failed to scan visible bounds for ${textureKey}`, e);
+      return { x: 0.5, y: 0.5 };
+    }
   }
 
   private applyChromaKeyFilter(rawKey: string, processedKey: string, filterMode: 'white' | 'green'): void {
