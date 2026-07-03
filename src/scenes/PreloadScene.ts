@@ -43,9 +43,7 @@ import Phaser from 'phaser';
  *   boss_slash.wav | boss_force_hit.wav | stage_clear.wav | game_over.wav
  *
  * MUSIC (public/assets/music/)
- *   theme_menu.ogg | theme_campaign.ogg | theme_boss.ogg
- *
- * ─────────────────────────────────────────────────────────────────────────
+ *  * ─────────────────────────────────────────────────────────────────────────
  */
 export class PreloadScene extends Phaser.Scene {
   constructor() { super('PreloadScene'); }
@@ -62,8 +60,11 @@ export class PreloadScene extends Phaser.Scene {
         console.warn('[PreloadScene] player_idle.png not found — using rectangle placeholder.');
       } else if (file.key.startsWith('player_idle_') && file.key.endsWith('_raw')) {
         console.warn(`[PreloadScene] Raw frame ${file.key} missing. Will fallback to static player or rectangle.`);
+      } else if (file.key.startsWith('player_deflect_up_') && file.key.endsWith('_raw')) {
+        console.warn(`[PreloadScene] Raw deflect up frame ${file.key} missing.`);
       }
     });
+
     this.load.image('logo_trimmed', 'assets/ui/clone_blast_logo_trimmed.png');
     this.load.image('logo_main',    'assets/ui/clone_blast_logo.png');
     this.load.image('player_idle',  'assets/player/player_idle.png');
@@ -73,6 +74,17 @@ export class PreloadScene extends Phaser.Scene {
     this.load.image('player_idle_02_raw', 'assets/player/idle/player_idle_02.png');
     this.load.image('player_idle_03_raw', 'assets/player/idle/player_idle_03.png');
     this.load.image('player_idle_04_raw', 'assets/player/idle/player_idle_04.png');
+
+    // ── Raw player upward deflect frames (green background to be removed at runtime) ────
+    console.log('[PreloadScene] Loading player deflect up frames...');
+    this.load.image('player_deflect_up_01_raw', 'assets/player/deflect_up/player_deflect_up_01.png');
+    this.load.image('player_deflect_up_02_raw', 'assets/player/deflect_up/player_deflect_up_02.png');
+    this.load.image('player_deflect_up_03_raw', 'assets/player/deflect_up/player_deflect_up_03.png');
+    this.load.image('player_deflect_up_04_raw', 'assets/player/deflect_up/player_deflect_up_04.png');
+    this.load.image('player_deflect_up_05_raw', 'assets/player/deflect_up/player_deflect_up_05.png');
+    this.load.image('player_deflect_up_06_raw', 'assets/player/deflect_up/player_deflect_up_06.png');
+    this.load.image('player_deflect_up_07_raw', 'assets/player/deflect_up/player_deflect_up_07.png');
+    this.load.image('player_deflect_up_08_raw', 'assets/player/deflect_up/player_deflect_up_08.png');
 
     // ── Other assets (uncomment when files are placed in public/assets/) ───────
 
@@ -95,7 +107,7 @@ export class PreloadScene extends Phaser.Scene {
   }
 
   create(): void {
-    // Process the loaded raw frames to remove the pure white background pixels
+    // Process the loaded raw frames to remove the background colors
     this.processRawFrames();
 
     // Create the animations if frames processed successfully
@@ -105,63 +117,85 @@ export class PreloadScene extends Phaser.Scene {
   }
 
   private processRawFrames(): void {
-    const frames = ['01', '02', '03', '04'];
-    
-    frames.forEach(num => {
+    // 1. Process Idle Frames (White-to-Alpha)
+    const idleNums = ['01', '02', '03', '04'];
+    idleNums.forEach(num => {
       const rawKey = `player_idle_${num}_raw`;
       const processedKey = `player_idle_${num}`;
+      this.applyChromaKeyFilter(rawKey, processedKey, 'white');
+    });
 
-      if (this.textures.exists(rawKey)) {
-        try {
-          const texture = this.textures.get(rawKey);
-          const image = texture.getSourceImage() as HTMLImageElement | HTMLCanvasElement;
-          
-          const canvas = document.createElement('canvas');
-          canvas.width = image.width;
-          canvas.height = image.height;
-          const ctx = canvas.getContext('2d');
-          
-          if (ctx) {
-            ctx.drawImage(image, 0, 0);
-            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const data = imgData.data;
-
-            // Loop through all pixels, converting near-white pixels (R, G, B >= 245) to alpha 0
-            for (let i = 0; i < data.length; i += 4) {
-              const r = data[i];
-              const g = data[i + 1];
-              const b = data[i + 2];
-              
-              if (r >= 245 && g >= 245 && b >= 245) {
-                data[i + 3] = 0; // Alpha transparent
-              }
-            }
-
-            ctx.putImageData(imgData, 0, 0);
-            
-            // Clean up any existing texture with the same name before saving
-            if (this.textures.exists(processedKey)) {
-              this.textures.remove(processedKey);
-            }
-            
-            this.textures.addCanvas(processedKey, canvas);
-            console.log(`[PreloadScene] Processed white background transparency for ${processedKey}`);
-          }
-        } catch (err) {
-          console.warn(`[PreloadScene] Failed to process white removal for ${rawKey}:`, err);
-        }
-      }
+    // 2. Process Deflect Up Frames (Green-to-Alpha)
+    const deflectUpNums = ['01', '02', '03', '04', '05', '06', '07', '08'];
+    deflectUpNums.forEach(num => {
+      const rawKey = `player_deflect_up_${num}_raw`;
+      const processedKey = `player_deflect_up_${num}`;
+      this.applyChromaKeyFilter(rawKey, processedKey, 'green');
     });
   }
 
+  private applyChromaKeyFilter(rawKey: string, processedKey: string, filterMode: 'white' | 'green'): void {
+    if (!this.textures.exists(rawKey)) return;
+
+    try {
+      const texture = this.textures.get(rawKey);
+      const image = texture.getSourceImage() as HTMLImageElement | HTMLCanvasElement;
+      
+      const canvas = document.createElement('canvas');
+      canvas.width = image.width;
+      canvas.height = image.height;
+      const ctx = canvas.getContext('2d');
+      
+      if (ctx) {
+        ctx.drawImage(image, 0, 0);
+        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imgData.data;
+
+        for (let i = 0; i < data.length; i += 4) {
+          const r = data[i];
+          const g = data[i + 1];
+          const b = data[i + 2];
+          
+          if (filterMode === 'white') {
+            // Threshold for near-white pixels
+            if (r >= 245 && g >= 245 && b >= 245) {
+              data[i + 3] = 0; // Set alpha to 0
+            }
+          } else if (filterMode === 'green') {
+            // Threshold for pure/near-green chroma key pixels (#00FF00)
+            if (g >= 240 && r <= 20 && b <= 20) {
+              data[i + 3] = 0; // Set alpha to 0
+            }
+          }
+        }
+
+        ctx.putImageData(imgData, 0, 0);
+        
+        if (this.textures.exists(processedKey)) {
+          this.textures.remove(processedKey);
+        }
+        
+        this.textures.addCanvas(processedKey, canvas);
+        if (filterMode === 'green') {
+          console.log(`[PreloadScene] Processed green chroma key for ${processedKey}`);
+        } else {
+          console.log(`[PreloadScene] Processed white background transparency for ${processedKey}`);
+        }
+      }
+    } catch (err) {
+      console.warn(`[PreloadScene] Failed to process ${filterMode} chroma key for ${rawKey}:`, err);
+    }
+  }
+
   private buildAnimations(): void {
-    const hasAllFrames = 
+    // Build player idle animation
+    const hasAllIdleFrames = 
       this.textures.exists('player_idle_01') &&
       this.textures.exists('player_idle_02') &&
       this.textures.exists('player_idle_03') &&
       this.textures.exists('player_idle_04');
 
-    if (hasAllFrames) {
+    if (hasAllIdleFrames) {
       if (!this.anims.exists('player_idle_anim')) {
         this.anims.create({
           key: 'player_idle_anim',
@@ -177,6 +211,21 @@ export class PreloadScene extends Phaser.Scene {
         });
         console.log('[PreloadScene] Registered animation: player_idle_anim (ping-pong with durations)');
       }
+    }
+
+    // Register that deflect up animation is ready (checked by player constructor)
+    const hasAllDeflectUpFrames = 
+      this.textures.exists('player_deflect_up_01') &&
+      this.textures.exists('player_deflect_up_02') &&
+      this.textures.exists('player_deflect_up_03') &&
+      this.textures.exists('player_deflect_up_04') &&
+      this.textures.exists('player_deflect_up_05') &&
+      this.textures.exists('player_deflect_up_06') &&
+      this.textures.exists('player_deflect_up_07') &&
+      this.textures.exists('player_deflect_up_08');
+
+    if (hasAllDeflectUpFrames) {
+      console.log('[PreloadScene] Player deflect up animation ready');
     }
   }
 }

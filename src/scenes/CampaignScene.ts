@@ -219,7 +219,7 @@ export class CampaignScene extends Phaser.Scene {
         }
         if (b.active && b.x > GAME_WIDTH + 80) b.destroy();
       } else {
-        if (b.x <= PLAYER_X) {
+        if (b.x <= PLAYER_X && !(b as any).pendingDeflect) {
           b.destroy();
           this.onBlasterHitPlayer();
         }
@@ -312,44 +312,97 @@ export class CampaignScene extends Phaser.Scene {
       return;
     }
 
-    const result = this.deflect.check(lane, this.blasters);
+    if (lane === 'upper' && this.player.hasDeflectUpFrames(this)) {
+      // ── Deflect Up with 8-frame Animation ──────────────────────────────────
+      this.player.consumeDeflectStamina();
 
-    switch (result.result) {
-      case DeflectResult.Perfect: {
-        this.player.consumeDeflectStamina();
-        this.player.state = lane === 'upper' ? PlayerState.DeflectUpper : PlayerState.DeflectLower;
-        this.combo.increment();
-        this.score.addPerfectDeflect();
-        this.force.addForce(this.player, FORCE_PER_PERFECT_DEFLECT);
-        result.blaster!.destroy();
-        this.showFeedback('PERFECT!', '#00ff88');
-        this.flashLane(lane);
-        this.time.delayedCall(200, () => this.clearDeflectState());
-        break;
+      // Perform the check instantly at t=0
+      const checkResult = this.deflect.check(lane, this.blasters);
+      const blasterToDeflect = checkResult.blaster;
+
+      if (blasterToDeflect) {
+        // Prevent the blaster from hitting the player while animation plays
+        (blasterToDeflect as any).pendingDeflect = true;
       }
-      case DeflectResult.Normal: {
-        this.player.consumeDeflectStamina();
-        this.player.state = lane === 'upper' ? PlayerState.DeflectUpper : PlayerState.DeflectLower;
-        this.combo.increment();
-        this.score.addNormalDeflect();
-        this.force.addForce(this.player, FORCE_PER_NORMAL_DEFLECT);
-        result.blaster!.destroy();
-        this.showFeedback('DEFLECT', '#00ccff');
-        this.flashLane(lane);
-        this.time.delayedCall(200, () => this.clearDeflectState());
-        break;
-      }
-      case DeflectResult.WrongLane: {
+
+      // Play deflect up animation
+      this.player.playDeflectUp(
+        // onActiveDeflect callback (fires at frame 05)
+        () => {
+          if (checkResult.result === DeflectResult.Perfect) {
+            this.combo.increment();
+            this.score.addPerfectDeflect();
+            this.force.addForce(this.player, FORCE_PER_PERFECT_DEFLECT);
+            if (blasterToDeflect) blasterToDeflect.destroy();
+            this.showFeedback('PERFECT!', '#00ff88');
+            this.flashLane(lane);
+          } else if (checkResult.result === DeflectResult.Normal) {
+            this.combo.increment();
+            this.score.addNormalDeflect();
+            this.force.addForce(this.player, FORCE_PER_NORMAL_DEFLECT);
+            if (blasterToDeflect) blasterToDeflect.destroy();
+            this.showFeedback('DEFLECT', '#00ccff');
+            this.flashLane(lane);
+          }
+        },
+        // onComplete callback (fires after frame 08)
+        () => {
+          this.clearDeflectState();
+        }
+      );
+
+      // Apply penalties instantly if WrongLane or Empty
+      if (checkResult.result === DeflectResult.WrongLane) {
         this.player.penalizeWrongLane();
         this.combo.reset();
         this.showFeedback('WRONG LANE!', '#ff8800');
-        break;
-      }
-      case DeflectResult.Empty: {
+      } else if (checkResult.result === DeflectResult.Empty) {
         this.player.penalizeEmpty();
         this.combo.reset();
         this.showFeedback('MISS!', '#ff4444');
-        break;
+      }
+
+    } else {
+      // ── Standard Fallback Deflect (instantly registers) ────────────────────
+      const result = this.deflect.check(lane, this.blasters);
+
+      switch (result.result) {
+        case DeflectResult.Perfect: {
+          this.player.consumeDeflectStamina();
+          this.player.state = lane === 'upper' ? PlayerState.DeflectUpper : PlayerState.DeflectLower;
+          this.combo.increment();
+          this.score.addPerfectDeflect();
+          this.force.addForce(this.player, FORCE_PER_PERFECT_DEFLECT);
+          result.blaster!.destroy();
+          this.showFeedback('PERFECT!', '#00ff88');
+          this.flashLane(lane);
+          this.time.delayedCall(200, () => this.clearDeflectState());
+          break;
+        }
+        case DeflectResult.Normal: {
+          this.player.consumeDeflectStamina();
+          this.player.state = lane === 'upper' ? PlayerState.DeflectUpper : PlayerState.DeflectLower;
+          this.combo.increment();
+          this.score.addNormalDeflect();
+          this.force.addForce(this.player, FORCE_PER_NORMAL_DEFLECT);
+          result.blaster!.destroy();
+          this.showFeedback('DEFLECT', '#00ccff');
+          this.flashLane(lane);
+          this.time.delayedCall(200, () => this.clearDeflectState());
+          break;
+        }
+        case DeflectResult.WrongLane: {
+          this.player.penalizeWrongLane();
+          this.combo.reset();
+          this.showFeedback('WRONG LANE!', '#ff8800');
+          break;
+        }
+        case DeflectResult.Empty: {
+          this.player.penalizeEmpty();
+          this.combo.reset();
+          this.showFeedback('MISS!', '#ff4444');
+          break;
+        }
       }
     }
   }

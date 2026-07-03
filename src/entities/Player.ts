@@ -24,6 +24,24 @@ const IDLE_SEQUENCE: IdleFrameConfig[] = [
   { key: 'player_idle_01', duration: 3000 },
 ];
 
+// Constants for custom deflect up animation timing (Option B manual controller)
+interface DeflectUpFrameConfig {
+  key: string;
+  duration: number;
+  activeDeflect?: boolean;
+}
+
+const DEFLECT_UP_SEQUENCE: DeflectUpFrameConfig[] = [
+  { key: 'player_deflect_up_01', duration: 35 },
+  { key: 'player_deflect_up_02', duration: 45 },
+  { key: 'player_deflect_up_03', duration: 50 },
+  { key: 'player_deflect_up_04', duration: 55 },
+  { key: 'player_deflect_up_05', duration: 80, activeDeflect: true },
+  { key: 'player_deflect_up_06', duration: 65 },
+  { key: 'player_deflect_up_07', duration: 60 },
+  { key: 'player_deflect_up_08', duration: 50 },
+];
+
 export class Player {
   // ── Stats ──────────────────────────────────────────────────────────────────
   hp:      number = MAX_HP;
@@ -37,6 +55,13 @@ export class Player {
   // ── Manual Idle Frame Controller variables ─────────────────────────────────
   private idleFrameTimer = 0;
   private currentIdleFrameIndex = 0;
+
+  // ── Manual Deflect Up Frame Controller variables ───────────────────────────
+  private activeAnimationSequence: DeflectUpFrameConfig[] | null = null;
+  private currentAnimFrameIndex = 0;
+  private animTimer = 0;
+  private onActiveDeflectTriggerCallback: (() => void) | null = null;
+  private onDeflectCompleteCallback: (() => void) | null = null;
 
   constructor(scene: Phaser.Scene) {
     const hasIdleFrames = 
@@ -84,6 +109,44 @@ export class Player {
     }
   }
 
+  // ── Deflect Up Helpers ─────────────────────────────────────────────────────
+
+  /** Check if all 8 processed transparent deflect up textures are successfully loaded. */
+  hasDeflectUpFrames(scene: Phaser.Scene): boolean {
+    return (
+      scene.textures.exists('player_deflect_up_01') &&
+      scene.textures.exists('player_deflect_up_02') &&
+      scene.textures.exists('player_deflect_up_03') &&
+      scene.textures.exists('player_deflect_up_04') &&
+      scene.textures.exists('player_deflect_up_05') &&
+      scene.textures.exists('player_deflect_up_06') &&
+      scene.textures.exists('player_deflect_up_07') &&
+      scene.textures.exists('player_deflect_up_08')
+    );
+  }
+
+  /** Trigger upward deflect animation, pausing idle sequence and executing callbacks on sync moments. */
+  playDeflectUp(onActiveDeflect: () => void, onComplete: () => void): void {
+    const scene = this.sprite.scene;
+    if (!this.hasDeflectUpFrames(scene)) {
+      console.warn('[Player] Using fallback because deflect up textures are missing');
+      onActiveDeflect();
+      onComplete();
+      return;
+    }
+
+    this.state = PlayerState.DeflectUpper;
+    this.activeAnimationSequence = DEFLECT_UP_SEQUENCE;
+    this.currentAnimFrameIndex = 0;
+    this.animTimer = 0;
+    this.onActiveDeflectTriggerCallback = onActiveDeflect;
+    this.onDeflectCompleteCallback = onComplete;
+
+    // Instantly set texture to frame 01
+    const frameConfig = this.activeAnimationSequence[0];
+    this.sprite.setTexture(frameConfig.key);
+  }
+
   // ── Stamina helpers ────────────────────────────────────────────────────────
 
   canDeflect(): boolean {
@@ -113,6 +176,7 @@ export class Player {
     this.hp = Math.max(this.hp - amount, 0);
     if (this.hp <= 0) {
       this.state = PlayerState.Dead;
+      this.activeAnimationSequence = null; // cancel active animation
       if (typeof this.sprite.setFillStyle === 'function') {
         this.sprite.setFillStyle(0x336666); // dim rectangle on death
       } else if (typeof this.sprite.setTint === 'function') {
@@ -124,6 +188,7 @@ export class Player {
       return true;
     }
     this.state = PlayerState.Hit;
+    this.activeAnimationSequence = null; // hit overrides animation
     return false;
   }
 
@@ -137,7 +202,8 @@ export class Player {
 
   /**
    * Called every frame from the active game scene update loop.
-   * Handles custom slow ping-pong frame switching while the player is in PlayerState.Idle.
+   * Handles custom slow ping-pong frame switching while the player is in PlayerState.Idle,
+   * or ticks the active upward deflect animation if one is playing.
    */
   update(time: number, deltaMs: number): void {
     if (this.state === PlayerState.Dead) {
@@ -145,13 +211,54 @@ export class Player {
     }
 
     const scene = this.sprite.scene;
-    const hasIdleFrames = 
-      scene.textures.exists('player_idle_01') &&
-      scene.textures.exists('player_idle_02') &&
-      scene.textures.exists('player_idle_03') &&
-      scene.textures.exists('player_idle_04');
 
-    // Return early if processed frames are not loaded or if using rectangle fallback
+    // ── 1. Deflect Animation Active (Option B manual timer tick) ─────────────
+    if (this.activeAnimationSequence) {
+      this.animTimer += deltaMs;
+      const currentFrameConfig = this.activeAnimationSequence[this.currentAnimFrameIndex];
+
+      if (this.animTimer >= currentFrameConfig.duration) {
+        this.animTimer = 0;
+        this.currentAnimFrameIndex++;
+
+        if (this.currentAnimFrameIndex >= this.activeAnimationSequence.length) {
+          // Animation cycle complete
+          this.activeAnimationSequence = null;
+          const completeCb = this.onDeflectCompleteCallback;
+          this.onActiveDeflectTriggerCallback = null;
+          this.onDeflectCompleteCallback = null;
+
+          // Return to Idle state and base frame
+          this.state = PlayerState.Idle;
+          this.idleFrameTimer = 0;
+          this.currentIdleFrameIndex = 0;
+          
+          if (this.hasIdleFramesLoaded(scene)) {
+            this.sprite.setTexture('player_idle_01');
+          }
+
+          if (completeCb) completeCb();
+        } else {
+          // Switch to next animation frame
+          const nextFrameConfig = this.activeAnimationSequence[this.currentAnimFrameIndex];
+          this.sprite.setTexture(nextFrameConfig.key);
+
+          // Log active collision frame and execute deflect checks
+          if (nextFrameConfig.activeDeflect) {
+            console.log(`[Player] Deflect up active frame reached: ${nextFrameConfig.key}`);
+            if (this.onActiveDeflectTriggerCallback) {
+              this.onActiveDeflectTriggerCallback();
+              // Prevent double trigger checks
+              this.onActiveDeflectTriggerCallback = null;
+            }
+          }
+        }
+      }
+      return; // Do not switch idle frames while deflect animation is active
+    }
+
+    // ── 2. Idle Animation Active (Slow custom breathing loop) ───────────────
+    const hasIdleFrames = this.hasIdleFramesLoaded(scene);
     if (!hasIdleFrames || typeof this.sprite.setTexture !== 'function') {
       return;
     }
@@ -169,14 +276,22 @@ export class Player {
         this.sprite.setTexture(nextFrameConfig.key);
       }
     } else {
-      // Action state active: reset timer and stay on frame 1 (default standing pose)
-      // This ensures action states are not overwritten by background idle switching.
+      // Non-idle, non-animating state (like hit or block other lane): lock to frame 1
       if (this.currentIdleFrameIndex !== 0) {
         this.currentIdleFrameIndex = 0;
         this.sprite.setTexture('player_idle_01');
       }
       this.idleFrameTimer = 0;
     }
+  }
+
+  private hasIdleFramesLoaded(scene: Phaser.Scene): boolean {
+    return (
+      scene.textures.exists('player_idle_01') &&
+      scene.textures.exists('player_idle_02') &&
+      scene.textures.exists('player_idle_03') &&
+      scene.textures.exists('player_idle_04')
+    );
   }
 
   destroy(): void {
