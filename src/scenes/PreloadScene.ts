@@ -62,6 +62,8 @@ export class PreloadScene extends Phaser.Scene {
         console.warn(`[PreloadScene] Raw frame ${file.key} missing. Will fallback to static player or rectangle.`);
       } else if (file.key.startsWith('player_deflect_up_') && file.key.endsWith('_raw')) {
         console.warn(`[PreloadScene] Raw deflect up frame ${file.key} missing.`);
+      } else if (file.key.startsWith('effect_') && file.key.endsWith('_raw')) {
+        console.warn(`[PreloadScene] Raw effect asset ${file.key} missing. Demo effects will fallback gracefully.`);
       }
     });
 
@@ -85,6 +87,13 @@ export class PreloadScene extends Phaser.Scene {
     this.load.image('player_deflect_up_06_raw', 'assets/player/deflect_up/player_deflect_up_06.png');
     this.load.image('player_deflect_up_07_raw', 'assets/player/deflect_up/player_deflect_up_07.png');
     this.load.image('player_deflect_up_08_raw', 'assets/player/deflect_up/player_deflect_up_08.png');
+
+    // ── Deflect up visual effect assets (green background chroma key) ──────────
+    console.log('[PreloadScene] Loading player deflect up effect assets...');
+    this.load.image('effect_slash_arc_up_raw',      'assets/effects/deflect_up/blue_slash_arc_up.png');
+    this.load.image('effect_deflect_spark_01_raw', 'assets/effects/deflect_up/blue_red_deflect_spark_01.png');
+    this.load.image('effect_deflect_spark_02_raw', 'assets/effects/deflect_up/blue_red_deflect_spark_02.png');
+    this.load.image('effect_deflect_spark_03_raw', 'assets/effects/deflect_up/blue_red_deflect_spark_03.png');
 
     // ── Other assets (uncomment when files are placed in public/assets/) ───────
 
@@ -132,6 +141,12 @@ export class PreloadScene extends Phaser.Scene {
       const processedKey = `player_deflect_up_${num}`;
       this.applyChromaKeyFilter(rawKey, processedKey, 'green');
     });
+
+    // 3. Process Visual Effect Frames (Green-to-Alpha)
+    this.applyChromaKeyFilter('effect_slash_arc_up_raw',      'effect_slash_arc_up',      'green');
+    this.applyChromaKeyFilter('effect_deflect_spark_01_raw', 'effect_deflect_spark_01', 'green');
+    this.applyChromaKeyFilter('effect_deflect_spark_02_raw', 'effect_deflect_spark_02', 'green');
+    this.applyChromaKeyFilter('effect_deflect_spark_03_raw', 'effect_deflect_spark_03', 'green');
   }
 
   private applyChromaKeyFilter(rawKey: string, processedKey: string, filterMode: 'white' | 'green'): void {
@@ -162,8 +177,8 @@ export class PreloadScene extends Phaser.Scene {
               data[i + 3] = 0; // Set alpha to 0
             }
           } else if (filterMode === 'green') {
-            // Threshold for pure/near-green chroma key pixels (#00FF00)
-            if (g >= 240 && r <= 20 && b <= 20) {
+            // Threshold for pure/near-green chroma key pixels (#00FF00) - permissive threshold
+            if (g >= 240 && r <= 30 && b <= 30) {
               data[i + 3] = 0; // Set alpha to 0
             }
           }

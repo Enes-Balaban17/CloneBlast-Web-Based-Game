@@ -6,11 +6,35 @@ import { hideMenuGifBackground } from '../ui/MenuGifBackground';
 
 const FONT = '"Courier New", Courier, monospace';
 
+// Configurable offsets for visual effects alignment (if not full-canvas aligned)
+const slashArcOffsetX = 0;
+const slashArcOffsetY = 0;
+const sparkOffsetX = 0;
+const sparkOffsetY = 0;
+
+// Coordinates for test blaster path
+const BLASTER_START_X = 1600;
+const BLASTER_START_Y = 650;
+const BLASTER_CONTACT_X = 430;
+const BLASTER_CONTACT_Y = 650;
+
 export class AnimationTestScene extends Phaser.Scene {
   private player!: Player;
   private statusText!: Phaser.GameObjects.Text;
   private messageText!: Phaser.GameObjects.Text;
   private messageTimer = 0;
+
+  // Demo visual states
+  private demoActive = false;
+  private contactReached = false;
+  private blasterState = 'NONE';
+  private sparkFrameName = 'NONE';
+
+  // Demo sprites/graphics
+  private testBlaster: Phaser.GameObjects.Graphics | null = null;
+  private redirectedBlaster: Phaser.GameObjects.Graphics | null = null;
+  private slashArcSprite: Phaser.GameObjects.Image | null = null;
+  private sparkSprite: Phaser.GameObjects.Image | null = null;
 
   // Key mappings
   private key1!: Phaser.Input.Keyboard.Key;
@@ -36,8 +60,8 @@ export class AnimationTestScene extends Phaser.Scene {
     showGameplayGifBackground();
 
     // Lifecyle cleanup
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, hideGameplayGifBackground, this);
-    this.events.once(Phaser.Scenes.Events.DESTROY, hideGameplayGifBackground, this);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.cleanupDemo, this);
+    this.events.once(Phaser.Scenes.Events.DESTROY, this.cleanupDemo, this);
 
     // Empty background lines for visual ground reference
     this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.0); // transparent container
@@ -49,11 +73,10 @@ export class AnimationTestScene extends Phaser.Scene {
     // Register onChainExitCallback for buffering testing
     this.player.onChainExitCallback = (actionId: string): boolean => {
       if (actionId === 'deflect_up') {
-        const success = this.player.playAction('deflect_up');
-        if (success) {
-          this.showMessage('Buffering: Chained Deflect Up', '#00ff88');
-        }
-        return success;
+        // Trigger a new demo cycle instantly
+        this.cleanupDemoOnly();
+        this.playDeflectUpDemo();
+        return true;
       }
       
       // If action is not available (deflect_down, reflect, force)
@@ -74,7 +97,7 @@ export class AnimationTestScene extends Phaser.Scene {
     // Tick the player visual/animation timers
     this.player.update(time, delta);
 
-    // Handle keys and play/queue logic once per press
+    // Handle keys and play/queue/demo logic once per press
     this.handleKeyboardInputs();
 
     // Update message timer
@@ -87,6 +110,132 @@ export class AnimationTestScene extends Phaser.Scene {
 
     // Refresh UI text indicators
     this.refreshUI();
+  }
+
+  private playDeflectUpDemo(): void {
+    this.demoActive = true;
+    this.contactReached = false;
+    this.blasterState = 'INCOMING';
+
+    // 1. Play player deflect up animation
+    this.player.playAction(
+      'deflect_up',
+      // onActiveDeflect (frame 05 reached - ~185ms from start)
+      () => {
+        this.contactReached = true;
+        this.blasterState = 'CONTACT';
+        console.log('[AnimationTestScene] Deflect up active frame reached: player_deflect_up_05');
+
+        // Destroy incoming blaster
+        if (this.testBlaster) {
+          this.testBlaster.destroy();
+          this.testBlaster = null;
+        }
+
+        // Spawn visual Slash Arc
+        const hasSlash = this.textures.exists('effect_slash_arc_up');
+        if (hasSlash) {
+          this.slashArcSprite = this.add.image(PLAYER_X + slashArcOffsetX, 860 + slashArcOffsetY, 'effect_slash_arc_up')
+            .setOrigin(0.5, 1)
+            .setScale(this.player.sprite.scale)
+            .setDepth(11);
+
+          // Hide/destroy slash arc after 120 ms
+          this.time.delayedCall(120, () => {
+            if (this.slashArcSprite) {
+              this.slashArcSprite.destroy();
+              this.slashArcSprite = null;
+            }
+          });
+        } else {
+          console.warn('[AnimationTestScene] Using fallback because effect_slash_arc_up texture is missing');
+        }
+
+        // Spawn visual Sparks animation
+        const hasSparks = this.textures.exists('effect_deflect_spark_01');
+        if (hasSparks) {
+          this.sparkSprite = this.add.image(PLAYER_X + sparkOffsetX, 860 + sparkOffsetY, 'effect_deflect_spark_01')
+            .setOrigin(0.5, 1)
+            .setScale(this.player.sprite.scale)
+            .setDepth(12);
+
+          this.sparkFrameName = 'spark_01';
+
+          // Spark 01: 45 ms
+          this.time.delayedCall(45, () => {
+            if (this.sparkSprite) {
+              this.sparkSprite.setTexture('effect_deflect_spark_02');
+              this.sparkFrameName = 'spark_02';
+            }
+          });
+
+          // Spark 02: 45 + 60 = 105 ms
+          this.time.delayedCall(105, () => {
+            if (this.sparkSprite) {
+              this.sparkSprite.setTexture('effect_deflect_spark_03');
+              this.sparkFrameName = 'spark_03';
+            }
+          });
+
+          // Spark 03: 105 + 55 = 160 ms
+          this.time.delayedCall(160, () => {
+            if (this.sparkSprite) {
+              this.sparkSprite.destroy();
+              this.sparkSprite = null;
+              this.sparkFrameName = 'NONE';
+            }
+          });
+        } else {
+          console.warn('[AnimationTestScene] Using fallback because spark textures are missing');
+        }
+
+        // Spawn visual redirected blaster bolt moving upward-right
+        this.blasterState = 'REDIRECTED';
+        this.redirectedBlaster = this.add.graphics();
+        this.redirectedBlaster.fillStyle(0xff3300, 1);
+        this.redirectedBlaster.fillRect(-22, -4, 44, 8);
+        this.redirectedBlaster.fillStyle(0xffcc00, 1);
+        this.redirectedBlaster.fillRect(-12, -2, 24, 4);
+        this.redirectedBlaster.setPosition(BLASTER_CONTACT_X, BLASTER_CONTACT_Y);
+        this.redirectedBlaster.setAngle(-35); // fly upwards-right
+
+        this.tweens.add({
+          targets: this.redirectedBlaster,
+          x: BLASTER_CONTACT_X + 280,
+          y: BLASTER_CONTACT_Y - 200,
+          duration: 160,
+          onComplete: () => {
+            if (this.redirectedBlaster) {
+              this.redirectedBlaster.destroy();
+              this.redirectedBlaster = null;
+              this.blasterState = 'NONE';
+            }
+          }
+        });
+      },
+      // onComplete (animation cycle finished - frames 08 ends)
+      () => {
+        this.demoActive = false;
+        this.contactReached = false;
+        this.showMessage('Demo Complete', '#00ff88');
+      }
+    );
+
+    // 2. Spawn incoming red blaster bolt
+    this.testBlaster = this.add.graphics();
+    this.testBlaster.fillStyle(0xff2200, 1);
+    this.testBlaster.fillRect(-30, -4, 60, 8);
+    this.testBlaster.fillStyle(0xffaa00, 1);
+    this.testBlaster.fillRect(-15, -2, 30, 4);
+    this.testBlaster.setPosition(BLASTER_START_X, BLASTER_START_Y);
+
+    // Tween the incoming blaster to arrive at BLASTER_CONTACT_X in exactly 185 ms
+    this.tweens.add({
+      targets: this.testBlaster,
+      x: BLASTER_CONTACT_X,
+      y: BLASTER_CONTACT_Y,
+      duration: 185,
+    });
   }
 
   private buildUI(): void {
@@ -110,7 +259,7 @@ export class AnimationTestScene extends Phaser.Scene {
     // Instructions/Guides
     const guides = [
       '1         : Play Idle',
-      '2 / W / ↑ : Deflect Up',
+      '2 / W / ↑ : Deflect Up Demo',
       '3 / S / ↓ : Deflect Down',
       '4 / D     : Force Reflect',
       '5 / Space : Force Power',
@@ -174,6 +323,7 @@ export class AnimationTestScene extends Phaser.Scene {
 
     // R -> Reset to Idle
     if (Phaser.Input.Keyboard.JustDown(this.keyR)) {
+      this.cleanupDemoOnly();
       this.player.playIdle();
       this.showMessage('Animation Reset', '#ffffff');
       return;
@@ -183,12 +333,13 @@ export class AnimationTestScene extends Phaser.Scene {
 
     // 1 -> Idle (resets buffer and goes to idle)
     if (Phaser.Input.Keyboard.JustDown(this.key1)) {
+      this.cleanupDemoOnly();
       this.player.playIdle();
       this.showMessage('Playing Idle animation', '#00ccff');
       return;
     }
 
-    // 2 / W / Up -> Deflect Up
+    // 2 / W / Up -> Deflect Up Demo
     if (
       Phaser.Input.Keyboard.JustDown(this.key2) ||
       Phaser.Input.Keyboard.JustDown(this.keyW) ||
@@ -198,12 +349,8 @@ export class AnimationTestScene extends Phaser.Scene {
         this.player.queueAction('deflect_up');
         this.showMessage('Buffered: Deflect Up', '#e5b800');
       } else {
-        const success = this.player.playAction('deflect_up');
-        if (success) {
-          this.showMessage('Playing Deflect Up', '#00ff88');
-        } else {
-          this.showMessage('Deflect Up animation not available yet', '#ff4444');
-        }
+        this.showMessage('Deflect Up Demo Started', '#00ff88');
+        this.playDeflectUpDemo();
       }
       return;
     }
@@ -258,13 +405,19 @@ export class AnimationTestScene extends Phaser.Scene {
     
     const activeText = isActiveDeflect ? '⚡ ACTIVE DEFLECT FRAME ⚡' : 'no';
     const exitText = isChainExit ? '🚪 CHAIN EXIT FRAME' : 'no';
+    
+    const contactText = this.contactReached ? '💥 BLASTER CONTACT 💥' : 'no';
 
     const textLines = [
       `Action: ${action.toUpperCase()}`,
       `Frame Key: ${frameKey}`,
       `Frame Index: ${frameIndex}`,
       `Buffered Action: ${buffered}`,
+      `Demo State: ${this.demoActive ? 'ACTIVE' : 'IDLE'}`,
+      `Blaster State: ${this.blasterState}`,
+      `Spark Frame: ${this.sparkFrameName}`,
       `Active Deflect: ${activeText}`,
+      `Blaster Contact: ${contactText}`,
       `Chain Exit: ${exitText}`
     ];
 
@@ -291,5 +444,38 @@ export class AnimationTestScene extends Phaser.Scene {
   private showMessage(text: string, color: string): void {
     this.messageText.setText(text).setColor(color).setAlpha(1);
     this.messageTimer = 1800; // visible for 1.8s
+  }
+
+  private cleanupDemoOnly(): void {
+    // Stop all tweens
+    this.tweens.killAll();
+
+    // Destroy graphics and images
+    if (this.testBlaster) {
+      this.testBlaster.destroy();
+      this.testBlaster = null;
+    }
+    if (this.redirectedBlaster) {
+      this.redirectedBlaster.destroy();
+      this.redirectedBlaster = null;
+    }
+    if (this.slashArcSprite) {
+      this.slashArcSprite.destroy();
+      this.slashArcSprite = null;
+    }
+    if (this.sparkSprite) {
+      this.sparkSprite.destroy();
+      this.sparkSprite = null;
+    }
+
+    this.demoActive = false;
+    this.contactReached = false;
+    this.blasterState = 'NONE';
+    this.sparkFrameName = 'NONE';
+  }
+
+  private cleanupDemo(): void {
+    this.cleanupDemoOnly();
+    hideGameplayGifBackground();
   }
 }
