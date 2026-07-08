@@ -26,10 +26,10 @@ const DEFLECT_DOWN_CONTACT_NORM_X = 0.74;
 const DEFLECT_DOWN_CONTACT_NORM_Y = 0.56;
 
 let DEFLECT_DOWN_CONTACT_FINE_TUNE_X = 72; // kept same
-let DEFLECT_DOWN_CONTACT_FINE_TUNE_Y = 63; // shifted 4px further DOWN
+let DEFLECT_DOWN_CONTACT_FINE_TUNE_Y = 67; // shifted 4px further DOWN
 
 let DEFLECT_DOWN_ARC_OFFSET_X = -25; // kept same
-let DEFLECT_DOWN_ARC_OFFSET_Y = -75; // shifted 30px further UP
+let DEFLECT_DOWN_ARC_OFFSET_Y = -95; // shifted 20px further UP
 let DEFLECT_DOWN_ARC_SCALE = 1.0;
 
 let DEFLECT_DOWN_SPARK_OFFSET_X = 0;
