@@ -88,6 +88,17 @@ export class PreloadScene extends Phaser.Scene {
     this.load.image('player_deflect_up_07_raw', 'assets/player/deflect_up/player_deflect_up_07.png');
     this.load.image('player_deflect_up_08_raw', 'assets/player/deflect_up/player_deflect_up_08.png');
 
+    // ── Raw player downward deflect frames (green background to be removed at runtime) ────
+    console.log('[PreloadScene] Loading player deflect down frames...');
+    this.load.image('player_deflect_down_01_raw', 'assets/player/deflect_down/player_deflect_down_01.png');
+    this.load.image('player_deflect_down_02_raw', 'assets/player/deflect_down/player_deflect_down_02.png');
+    this.load.image('player_deflect_down_03_raw', 'assets/player/deflect_down/player_deflect_down_03.png');
+    this.load.image('player_deflect_down_04_raw', 'assets/player/deflect_down/player_deflect_down_04.png');
+    this.load.image('player_deflect_down_05_raw', 'assets/player/deflect_down/player_deflect_down_05.png');
+    this.load.image('player_deflect_down_06_raw', 'assets/player/deflect_down/player_deflect_down_06.png');
+    this.load.image('player_deflect_down_07_raw', 'assets/player/deflect_down/player_deflect_down_07.png');
+    this.load.image('player_deflect_down_08_raw', 'assets/player/deflect_down/player_deflect_down_08.png');
+
     // ── Deflect up visual effect assets (green background chroma key) ──────────
     console.log('Loading Deflect Up effects...');
     console.log('Trying effect path: /assets/player/deflect_up/');
@@ -111,6 +122,12 @@ export class PreloadScene extends Phaser.Scene {
     this.load.image('effect_deflect_spark_01_alt_effects',  'assets/effects/deflect_up/blue_deflect_spark_01.png');
     this.load.image('effect_deflect_spark_02_alt_effects',  'assets/effects/deflect_up/blue_deflect_spark_02.png');
     this.load.image('effect_deflect_spark_03_alt_effects',  'assets/effects/deflect_up/blue_deflect_spark_03.png');
+
+    // ── Deflect down visual effect assets ─────────────────────────────────────
+    console.log('Loading Deflect Down effects...');
+    console.log('Trying effect path: /assets/player/deflect_down/');
+    this.load.image('effect_slash_arc_down_raw_player', 'assets/player/deflect_down/blue_slash_arc_down.png');
+    this.load.image('effect_slash_arc_down_raw_effects', 'assets/effects/deflect_down/blue_slash_arc_down.png');
 
     // ── Other assets (uncomment when files are placed in public/assets/) ───────
 
@@ -234,6 +251,40 @@ export class PreloadScene extends Phaser.Scene {
         console.warn(`Missing spark ${num} effect`);
       }
     });
+
+    // 4. Process Deflect Down Frames (Green-to-Alpha)
+    const deflectDownNums = ['01', '02', '03', '04', '05', '06', '07', '08'];
+    deflectDownNums.forEach(num => {
+      const rawKey = `player_deflect_down_${num}_raw`;
+      const processedKey = `player_deflect_down_${num}`;
+      this.applyChromaKeyFilter(rawKey, processedKey, 'green');
+    });
+
+    // 5. Process Deflect Down Slash Arc
+    let downFolderUsed = '';
+    if (this.textures.exists('effect_slash_arc_down_raw_player')) {
+      downFolderUsed = '/assets/player/deflect_down/';
+    } else if (this.textures.exists('effect_slash_arc_down_raw_effects')) {
+      downFolderUsed = '/assets/effects/deflect_down/';
+    }
+
+    if (downFolderUsed) {
+      console.log(`[PreloadScene] Loaded deflect down effects from: ${downFolderUsed}`);
+    } else {
+      console.log('[PreloadScene] Trying effect path: /assets/player/deflect_down/');
+    }
+
+    const slashArcDownPlayer = 'effect_slash_arc_down_raw_player';
+    const slashArcDownEffects = 'effect_slash_arc_down_raw_effects';
+    if (this.textures.exists(slashArcDownPlayer)) {
+      this.applyChromaKeyFilter(slashArcDownPlayer, 'effect_slash_arc_down', 'green');
+      console.log('Loaded blue_slash_arc_down.png');
+    } else if (this.textures.exists(slashArcDownEffects)) {
+      this.applyChromaKeyFilter(slashArcDownEffects, 'effect_slash_arc_down', 'green');
+      console.log('Loaded blue_slash_arc_down.png');
+    } else {
+      console.warn('Missing slash arc down effect');
+    }
   }
 
   private calculateVisibleBoundsCenter(textureKey: string): { x: number; y: number } | null {

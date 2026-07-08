@@ -44,6 +44,17 @@ const DEFLECT_UP_SEQUENCE: DeflectUpFrameConfig[] = [
   { key: 'player_deflect_up_08', duration: 50 },
 ];
 
+const DEFLECT_DOWN_SEQUENCE: DeflectUpFrameConfig[] = [
+  { key: 'player_deflect_down_01', duration: 35 },
+  { key: 'player_deflect_down_02', duration: 45 },
+  { key: 'player_deflect_down_03', duration: 50 },
+  { key: 'player_deflect_down_04', duration: 55 },
+  { key: 'player_deflect_down_05', duration: 420, activeDeflect: true },
+  { key: 'player_deflect_down_06', duration: 65 },
+  { key: 'player_deflect_down_07', duration: 60, chainExit: true },
+  { key: 'player_deflect_down_08', duration: 50 },
+];
+
 export class Player {
   // ── Stats ──────────────────────────────────────────────────────────────────
   hp:      number = MAX_HP;
@@ -143,6 +154,42 @@ export class Player {
 
     this.state = PlayerState.DeflectUpper;
     this.activeAnimationSequence = DEFLECT_UP_SEQUENCE;
+    this.currentAnimFrameIndex = 0;
+    this.animTimer = 0;
+    this.onActiveDeflectTriggerCallback = onActiveDeflect;
+    this.onDeflectCompleteCallback = onComplete;
+
+    // Instantly set texture to frame 01
+    const frameConfig = this.activeAnimationSequence[0];
+    this.sprite.setTexture(frameConfig.key);
+  }
+
+  /** Check if all 8 processed transparent deflect down textures are successfully loaded. */
+  hasDeflectDownFrames(scene: Phaser.Scene): boolean {
+    return (
+      scene.textures.exists('player_deflect_down_01') &&
+      scene.textures.exists('player_deflect_down_02') &&
+      scene.textures.exists('player_deflect_down_03') &&
+      scene.textures.exists('player_deflect_down_04') &&
+      scene.textures.exists('player_deflect_down_05') &&
+      scene.textures.exists('player_deflect_down_06') &&
+      scene.textures.exists('player_deflect_down_07') &&
+      scene.textures.exists('player_deflect_down_08')
+    );
+  }
+
+  /** Trigger downward deflect animation, pausing idle sequence and executing callbacks on sync moments. */
+  playDeflectDown(onActiveDeflect: () => void, onComplete: () => void): void {
+    const scene = this.sprite.scene;
+    if (!this.hasDeflectDownFrames(scene)) {
+      console.warn('[Player] Using fallback because deflect down textures are missing');
+      onActiveDeflect();
+      onComplete();
+      return;
+    }
+
+    this.state = PlayerState.DeflectLower;
+    this.activeAnimationSequence = DEFLECT_DOWN_SEQUENCE;
     this.currentAnimFrameIndex = 0;
     this.animTimer = 0;
     this.onActiveDeflectTriggerCallback = onActiveDeflect;
@@ -350,8 +397,13 @@ export class Player {
       this.playDeflectUp(onActiveFrame || (() => {}), onComplete || (() => {}));
       return true;
     }
+
+    if (animationId === 'deflect_down') {
+      this.playDeflectDown(onActiveFrame || (() => {}), onComplete || (() => {}));
+      return true;
+    }
     
-    // Future action animations (deflect_down, reflect, force, etc.) can be hooked here.
+    // Future action animations (reflect, force, etc.) can be hooked here.
     return false;
   }
 
@@ -384,6 +436,7 @@ export class Player {
   getCurrentAction(): string {
     if (this.state === PlayerState.Dead) return 'dead';
     if (this.activeAnimationSequence === DEFLECT_UP_SEQUENCE) return 'deflect_up';
+    if (this.activeAnimationSequence === DEFLECT_DOWN_SEQUENCE) return 'deflect_down';
     return 'idle';
   }
 
