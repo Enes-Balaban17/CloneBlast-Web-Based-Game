@@ -26,11 +26,14 @@ const DEFLECT_DOWN_CONTACT_NORM_X = 0.74;
 const DEFLECT_DOWN_CONTACT_NORM_Y = 0.56;
 
 let DEFLECT_DOWN_CONTACT_FINE_TUNE_X = 72; // kept same
-let DEFLECT_DOWN_CONTACT_FINE_TUNE_Y = 67; // shifted 4px further DOWN
+let DEFLECT_DOWN_CONTACT_FINE_TUNE_Y = 69; // shifted 2px further DOWN
 
-let DEFLECT_DOWN_ARC_OFFSET_X = -25; // kept same
-let DEFLECT_DOWN_ARC_OFFSET_Y = -95; // shifted 20px further UP
+let DEFLECT_DOWN_ARC_OFFSET_X = -35; // moved slightly more LEFT
+let DEFLECT_DOWN_ARC_OFFSET_Y = -125; // shifted clearly UP
 let DEFLECT_DOWN_ARC_SCALE = 1.0;
+const DEFLECT_DOWN_ARC_ANGLE_DEG = -28; // rotates down arc to align with saber visual
+
+const USE_UP_ARC_AS_DOWN_ARC_FALLBACK = false; // fallback toggle
 
 let DEFLECT_DOWN_SPARK_OFFSET_X = 0;
 let DEFLECT_DOWN_SPARK_OFFSET_Y = 0;
@@ -497,6 +500,11 @@ export class AnimationTestScene extends Phaser.Scene {
       posX = PLAYER_X + slashArcOffsetX;
       posY = 860 + slashArcOffsetY;
       mult = slashArcScaleMultiplier;
+
+      this.slashArcSprite = this.add.image(posX, posY, key)
+        .setOrigin(originX, originY)
+        .setScale(scaleXVal * mult, scaleYVal * mult)
+        .setDepth(11);
     } else {
       mult = DEFLECT_DOWN_ARC_SCALE;
       const contact = this.getDeflectDownSwordContactPoint();
@@ -511,12 +519,20 @@ export class AnimationTestScene extends Phaser.Scene {
       } else {
         originY = 0.5;
       }
-    }
 
-    this.slashArcSprite = this.add.image(posX, posY, key)
-      .setOrigin(originX, originY)
-      .setScale(scaleXVal * mult, scaleYVal * mult)
-      .setDepth(11); // Layer 3: slash down arc (above player sprite @ depth 10)
+      const activeKey = USE_UP_ARC_AS_DOWN_ARC_FALLBACK ? 'effect_slash_arc_up' : key;
+      this.slashArcSprite = this.add.image(posX, posY, activeKey)
+        .setOrigin(originX, originY)
+        .setScale(scaleXVal * mult, scaleYVal * mult)
+        .setDepth(11); // Layer 3: slash down arc (above player sprite @ depth 10)
+
+      if (USE_UP_ARC_AS_DOWN_ARC_FALLBACK) {
+        this.slashArcSprite.setFlipY(true);
+        this.slashArcSprite.setAngle(-35);
+      } else {
+        this.slashArcSprite.setAngle(DEFLECT_DOWN_ARC_ANGLE_DEG);
+      }
+    }
 
     // Hide/destroy slash arc after 120 ms
     this.slashArcTimer = this.time.delayedCall(120, () => {
