@@ -25,11 +25,11 @@ let sparkScaleMultiplier = 1.0;
 const DEFLECT_DOWN_CONTACT_NORM_X = 0.74;
 const DEFLECT_DOWN_CONTACT_NORM_Y = 0.56;
 
-let DEFLECT_DOWN_CONTACT_FINE_TUNE_X = 45; // shifted more RIGHT
-let DEFLECT_DOWN_CONTACT_FINE_TUNE_Y = 32; // shifted more DOWN
+let DEFLECT_DOWN_CONTACT_FINE_TUNE_X = 65; // shifted more RIGHT
+let DEFLECT_DOWN_CONTACT_FINE_TUNE_Y = 50; // shifted more DOWN
 
-let DEFLECT_DOWN_ARC_OFFSET_X = 55; // moved more RIGHT
-let DEFLECT_DOWN_ARC_OFFSET_Y = 0;
+let DEFLECT_DOWN_ARC_OFFSET_X = 25; // moved LEFT relative to contact point
+let DEFLECT_DOWN_ARC_OFFSET_Y = -8; // shifted UP relative to contact point
 let DEFLECT_DOWN_ARC_SCALE = 1.0;
 
 let DEFLECT_DOWN_SPARK_OFFSET_X = 0;
@@ -280,6 +280,7 @@ export class AnimationTestScene extends Phaser.Scene {
         this.redirectedBlaster.fillRect(-12, -2, 24, 4);
         this.redirectedBlaster.setPosition(targetX, targetY);
         this.redirectedBlaster.setAngle(-45);
+        this.redirectedBlaster.setDepth(12); // Layer 4: incoming / redirected blaster
 
         this.tweens.add({
           targets: this.redirectedBlaster,
@@ -314,6 +315,7 @@ export class AnimationTestScene extends Phaser.Scene {
     this.testBlaster.fillRect(-30, -4, 60, 8);
     this.testBlaster.fillStyle(0xffaa00, 1);
     this.testBlaster.fillRect(-15, -2, 30, 4);
+    this.testBlaster.setDepth(12); // Layer 4: incoming / redirected blaster
 
     const startY = targetY - 6;
     this.testBlaster.setPosition(GAME_WIDTH + 80, startY);
@@ -412,6 +414,7 @@ export class AnimationTestScene extends Phaser.Scene {
         this.redirectedBlaster.fillRect(-12, -2, 24, 4);
         this.redirectedBlaster.setPosition(targetX, targetY);
         this.redirectedBlaster.setAngle(-25); // flatter deflection bounce
+        this.redirectedBlaster.setDepth(12); // Layer 4: incoming / redirected blaster
 
         this.tweens.add({
           targets: this.redirectedBlaster,
@@ -440,12 +443,13 @@ export class AnimationTestScene extends Phaser.Scene {
     const targetX = contact.x;
     const targetY = contact.y;
 
-    // 2. Spawn incoming red blaster bolt (starts higher at lower deflection contact Y)
+    // 2. Spawn incoming red blaster bolt
     this.testBlaster = this.add.graphics();
     this.testBlaster.fillStyle(0xff2200, 1);
     this.testBlaster.fillRect(-30, -4, 60, 8);
     this.testBlaster.fillStyle(0xffaa00, 1);
     this.testBlaster.fillRect(-15, -2, 30, 4);
+    this.testBlaster.setDepth(12); // Layer 4: incoming / redirected blaster
 
     const startY = targetY; // comes horizontally at sword-tip height
     this.testBlaster.setPosition(GAME_WIDTH + 80, startY);
@@ -505,15 +509,7 @@ export class AnimationTestScene extends Phaser.Scene {
     this.slashArcSprite = this.add.image(posX, posY, key)
       .setOrigin(originX, originY)
       .setScale(scaleXVal * mult, scaleYVal * mult)
-      .setDepth(11);
-
-    // Hide/destroy slash arc after 120 ms
-    this.time.delayedCall(120, () => {
-      if (this.slashArcSprite) {
-        this.slashArcSprite.destroy();
-        this.slashArcSprite = null;
-      }
-    });
+      .setDepth(11); // Layer 3: slash down arc (renders above player sprite @ depth 10)
   }
 
   /** Spawn visual spark sequence centered on deflect contactPoint with visible-bounds anchors. */
@@ -534,7 +530,7 @@ export class AnimationTestScene extends Phaser.Scene {
     this.sparkSprite = this.add.image(contactPoint.x, contactPoint.y, 'effect_deflect_spark_01')
       .setOrigin(anchor01.x, anchor01.y)
       .setScale(scaleXVal, scaleYVal)
-      .setDepth(12);
+      .setDepth(13); // Layer 5: spark effects (above blaster @ depth 12 and slash arc @ depth 11)
 
     this.sparkFrameName = 'spark_01';
 
@@ -580,11 +576,12 @@ export class AnimationTestScene extends Phaser.Scene {
     gfx.fillRoundedRect(cardX, cardY, cardW, cardH, 8);
     gfx.lineStyle(1.5, 0x00ccff, 0.3);
     gfx.strokeRoundedRect(cardX, cardY, cardW, cardH, 8);
+    gfx.setDepth(100); // Layer 6: UI Elements
 
     // Title label (Font size: 24px)
     this.add.text(cardX + 20, cardY + 15, '🤖 ANIMATION TEST', {
       fontSize: '24px', fontFamily: FONT, color: '#ffb833', fontStyle: 'bold'
-    });
+    }).setDepth(100);
 
     // Instructions/Guides (Font size: 14px, Line spacing: 23px)
     const guides = [
@@ -599,7 +596,7 @@ export class AnimationTestScene extends Phaser.Scene {
     guides.forEach((text, i) => {
       this.add.text(cardX + 20, cardY + 55 + i * 23, text, {
         fontSize: '14px', fontFamily: FONT, color: '#8899aa'
-      });
+      }).setDepth(100);
     });
 
     // Divider line at Y = 220
@@ -609,18 +606,18 @@ export class AnimationTestScene extends Phaser.Scene {
     // Live state status text (Font size: 14px, Line spacing: 17px, compact dual column layout)
     this.statusText = this.add.text(cardX + 20, cardY + 233, '', {
       fontSize: '14px', fontFamily: FONT, color: '#ffffff', lineSpacing: 4
-    });
+    }).setDepth(100);
 
     // Alert feedback message text (middle bottom)
     this.messageText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT - 120, '', {
       fontSize: '32px', fontFamily: FONT, color: '#ffffff',
       stroke: '#000000', strokeThickness: 4
-    }).setOrigin(0.5).setAlpha(0);
+    }).setOrigin(0.5).setAlpha(0).setDepth(100);
 
     // Scene Label top center
     this.add.text(GAME_WIDTH / 2, 20, 'ANIMATION PREVIEW SCENE', {
       fontSize: '20px', fontFamily: FONT, color: '#556688'
-    }).setOrigin(0.5, 0);
+    }).setOrigin(0.5, 0).setDepth(100);
   }
 
   private bindKeyboard(): void {
@@ -901,20 +898,40 @@ export class AnimationTestScene extends Phaser.Scene {
     const timingStr = this.deflectMode === 'UP' ? 'STANDARD' : 'FAST';
 
     // Format shorter side-by-side variables to prevent overflow inside smaller card
-    const textLines = [
-      `Action: ${action.toUpperCase()}`,
-      `Frame : ${frameKey}`,
-      `Index : ${frameIndex}       | Buffer : ${buffered}`,
-      `Demo  : ${this.demoActive ? 'ACTIVE' : 'IDLE'}     | Blaster: ${this.blasterState}`,
-      `Spark : ${this.sparkFrameName} | Active : ${activeText}`,
-      `Contact: ${contactText}      | Chain  : ${exitText}`,
-      `Slash Arc: ${slashArcText}   | Textures: ${texturesStatus}`,
-      `Mode  : DOWN (FAST)      | Timing : ${timingStr}`, // Show Mode details
-      `Contact: (${Math.floor(contact.x)},${Math.floor(contact.y)})`,
-      `Arc    : Pos=(${Math.floor(this.slashArcSprite ? this.slashArcSprite.x : 0)},${Math.floor(this.slashArcSprite ? this.slashArcSprite.y : 0)}) Offset=${slashOffset}`,
-      `Spark  : Pos=(${Math.floor(sparkXVal)},${Math.floor(sparkYVal)}) Offset=${currentSparkOffset}`,
-      `Blaster Target: (${Math.floor(this.deflectMode === 'UP' ? contact.x + SPARK_CONTACT_OFFSET_X : contact.x)},${Math.floor(this.deflectMode === 'UP' ? contact.y + SPARK_CONTACT_OFFSET_Y : contact.y)})`
-    ];
+    let textLines: string[] = [];
+
+    if (this.deflectMode === 'UP') {
+      textLines = [
+        `Action: ${action.toUpperCase()}`,
+        `Frame : ${frameKey}`,
+        `Index : ${frameIndex}       | Buffer : ${buffered}`,
+        `Demo  : ${this.demoActive ? 'ACTIVE' : 'IDLE'}     | Blaster: ${this.blasterState}`,
+        `Spark : ${this.sparkFrameName} | Active : ${activeText}`,
+        `Contact: ${contactText}      | Chain  : ${exitText}`,
+        `Slash Arc: ${slashArcText}   | Textures: ${texturesStatus}`,
+        `Up Contact: (${Math.floor(contact.x)},${Math.floor(contact.y)})`,
+        `Up Arc: Pos=(${Math.floor(this.slashArcSprite ? this.slashArcSprite.x : 0)},${Math.floor(this.slashArcSprite ? this.slashArcSprite.y : 0)}) Offset=${slashOffset}`,
+        `Up Spark: Pos=(${Math.floor(sparkXVal)},${Math.floor(sparkYVal)}) Offset=${currentSparkOffset}`,
+        `Up Blaster Target: (${Math.floor(contact.x + SPARK_CONTACT_OFFSET_X)},${Math.floor(contact.y + SPARK_CONTACT_OFFSET_Y)})`,
+        `Mode  : UP               | Timing : ${timingStr}`
+      ];
+    } else {
+      textLines = [
+        `Action: ${action.toUpperCase()}`,
+        `Frame : ${frameKey}`,
+        `Index : ${frameIndex}       | Buffer : ${buffered}`,
+        `Demo  : ${this.demoActive ? 'ACTIVE' : 'IDLE'}     | Blaster: ${this.blasterState}`,
+        `Spark : ${this.sparkFrameName} | Active : ${activeText}`,
+        `Contact: ${contactText}      | Chain  : ${exitText}`,
+        `Slash Arc: ${slashArcText}   | Textures: ${texturesStatus}`,
+        `Down Contact: (${Math.floor(contact.x)},${Math.floor(contact.y)})`,
+        `Down Arc: Pos=(${Math.floor(this.slashArcSprite ? this.slashArcSprite.x : 0)},${Math.floor(this.slashArcSprite ? this.slashArcSprite.y : 0)})`,
+        `Down Spark: Pos=(${Math.floor(sparkXVal)},${Math.floor(sparkYVal)})`,
+        `Down Blaster Target: (${Math.floor(contact.x)},${Math.floor(contact.y)})`,
+        `Down Arc Offset: (${DEFLECT_DOWN_ARC_OFFSET_X},${DEFLECT_DOWN_ARC_OFFSET_Y})`,
+        `Down Contact Fine Tune: (${DEFLECT_DOWN_CONTACT_FINE_TUNE_X},${DEFLECT_DOWN_CONTACT_FINE_TUNE_Y})`
+      ];
+    }
 
     this.statusText.setText(textLines.join('\n'));
 
