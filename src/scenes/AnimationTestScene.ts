@@ -25,11 +25,11 @@ let sparkScaleMultiplier = 1.0;
 const DEFLECT_DOWN_CONTACT_NORM_X = 0.74;
 const DEFLECT_DOWN_CONTACT_NORM_Y = 0.56;
 
-let DEFLECT_DOWN_CONTACT_FINE_TUNE_X = 65; // shifted more RIGHT
-let DEFLECT_DOWN_CONTACT_FINE_TUNE_Y = 50; // shifted more DOWN
+let DEFLECT_DOWN_CONTACT_FINE_TUNE_X = 70; // shifted more RIGHT (moved 5px)
+let DEFLECT_DOWN_CONTACT_FINE_TUNE_Y = 55; // shifted more DOWN (moved 5px)
 
-let DEFLECT_DOWN_ARC_OFFSET_X = -25; // moved LEFT relative to contact point
-let DEFLECT_DOWN_ARC_OFFSET_Y = -8; // shifted UP relative to contact point
+let DEFLECT_DOWN_ARC_OFFSET_X = -25; // kept same
+let DEFLECT_DOWN_ARC_OFFSET_Y = -18; // shifted further UP by 10px
 let DEFLECT_DOWN_ARC_SCALE = 1.0;
 
 let DEFLECT_DOWN_SPARK_OFFSET_X = 0;
