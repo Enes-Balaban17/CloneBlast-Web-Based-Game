@@ -28,7 +28,7 @@ const DEFLECT_DOWN_CONTACT_NORM_Y = 0.56;
 let DEFLECT_DOWN_CONTACT_FINE_TUNE_X = 65; // shifted more RIGHT
 let DEFLECT_DOWN_CONTACT_FINE_TUNE_Y = 50; // shifted more DOWN
 
-let DEFLECT_DOWN_ARC_OFFSET_X = 25; // moved LEFT relative to contact point
+let DEFLECT_DOWN_ARC_OFFSET_X = -25; // moved LEFT relative to contact point
 let DEFLECT_DOWN_ARC_OFFSET_Y = -8; // shifted UP relative to contact point
 let DEFLECT_DOWN_ARC_SCALE = 1.0;
 
@@ -63,6 +63,12 @@ export class AnimationTestScene extends Phaser.Scene {
   private slashArcSprite: Phaser.GameObjects.Image | null = null;
   private sparkSprite: Phaser.GameObjects.Image | null = null;
   private debugMarker: Phaser.GameObjects.Graphics | null = null;
+
+  // Timer handles for slash arc and spark frame sequences
+  private slashArcTimer: Phaser.Time.TimerEvent | null = null;
+  private sparkTimer1: Phaser.Time.TimerEvent | null = null;
+  private sparkTimer2: Phaser.Time.TimerEvent | null = null;
+  private sparkTimer3: Phaser.Time.TimerEvent | null = null;
 
   // Key mappings
   private key1!: Phaser.Input.Keyboard.Key;
@@ -114,7 +120,7 @@ export class AnimationTestScene extends Phaser.Scene {
 
     // Register onChainExitCallback for buffering testing
     this.player.onChainExitCallback = (actionId: string): boolean => {
-      this.cleanupDemoOnly();
+      this.clearTemporaryEffects();
 
       if (actionId === 'deflect_up') {
         this.playPlainDeflectUp();
@@ -144,6 +150,12 @@ export class AnimationTestScene extends Phaser.Scene {
 
     // Handle keys and play/queue/demo logic once per press
     this.handleKeyboardInputs();
+
+    // Force hide/destroy the slash arc if player is on frame 06 or later
+    const isFrame05 = this.player.isCurrentFrameActiveDeflect();
+    if (!isFrame05 && this.slashArcSprite) {
+      this.cleanupSlashArc();
+    }
 
     // Update message timer
     if (this.messageTimer > 0) {
@@ -217,11 +229,7 @@ export class AnimationTestScene extends Phaser.Scene {
   /** Plays the plain Deflect Up animation. */
   private playPlainDeflectUp(): void {
     this.deflectMode = 'UP';
-    this.demoActive = false;
-    this.contactReached = false;
-    this.blasterState = 'NONE';
-    this.sparkFrameName = 'NONE';
-    this.currentSparkContactPoint = null;
+    this.clearTemporaryEffects();
     this.drawDebugMarker();
 
     this.player.playAction(
@@ -240,8 +248,8 @@ export class AnimationTestScene extends Phaser.Scene {
   /** Plays the full visual deflect up demo. */
   private playDeflectUpDemo(): void {
     this.deflectMode = 'UP';
+    this.clearTemporaryEffects();
     this.demoActive = true;
-    this.contactReached = false;
     this.blasterState = 'INCOMING';
     this.drawDebugMarker();
 
@@ -342,11 +350,7 @@ export class AnimationTestScene extends Phaser.Scene {
     }
 
     this.deflectMode = 'DOWN';
-    this.demoActive = false;
-    this.contactReached = false;
-    this.blasterState = 'NONE';
-    this.sparkFrameName = 'NONE';
-    this.currentSparkContactPoint = null;
+    this.clearTemporaryEffects();
     this.drawDebugMarker();
 
     this.player.playAction(
@@ -370,8 +374,8 @@ export class AnimationTestScene extends Phaser.Scene {
     }
 
     this.deflectMode = 'DOWN';
+    this.clearTemporaryEffects();
     this.demoActive = true;
-    this.contactReached = false;
     this.blasterState = 'INCOMING';
     this.drawDebugMarker();
 
@@ -385,7 +389,7 @@ export class AnimationTestScene extends Phaser.Scene {
 
         // Calculate and store the target contact coordinates exactly once at the beginning of frame 05
         const contact = this.getDeflectDownSwordContactPoint();
-        const targetX = contact.x; // aims at contact point directly
+        const targetX = contact.x;
         const targetY = contact.y; 
         
         // Stored spark coordinate applies DEFLECT_DOWN_SPARK_OFFSET
@@ -405,7 +409,7 @@ export class AnimationTestScene extends Phaser.Scene {
         // Spawn visual Sparks animation centered on currentSparkContactPoint
         this.spawnSparkSequence(this.currentSparkContactPoint);
 
-        // Spawn visual redirected blaster bolt moving upward-right from the contact point
+        // Spawn visual redirected blaster bolt moving downward-right from the contact point
         this.blasterState = 'REDIRECTED';
         this.redirectedBlaster = this.add.graphics();
         this.redirectedBlaster.fillStyle(0xff3300, 1);
@@ -413,13 +417,13 @@ export class AnimationTestScene extends Phaser.Scene {
         this.redirectedBlaster.fillStyle(0xffcc00, 1);
         this.redirectedBlaster.fillRect(-12, -2, 24, 4);
         this.redirectedBlaster.setPosition(targetX, targetY);
-        this.redirectedBlaster.setAngle(-25); // flatter deflection bounce
+        this.redirectedBlaster.setAngle(25); // positive angle pointing downward-right
         this.redirectedBlaster.setDepth(12); // Layer 4: incoming / redirected blaster
 
         this.tweens.add({
           targets: this.redirectedBlaster,
           x: targetX + 160,
-          y: targetY - 160,
+          y: targetY + 160, // goes downward-right
           duration: 160,
           onComplete: () => {
             if (this.redirectedBlaster) {
@@ -477,6 +481,9 @@ export class AnimationTestScene extends Phaser.Scene {
       return;
     }
 
+    // Cancel old timer and destroy old sprite before creating new one
+    this.cleanupSlashArc();
+
     const scaleXVal = this.player.sprite.scaleX || 1.0;
     const scaleYVal = this.player.sprite.scaleY || 1.0;
 
@@ -509,7 +516,12 @@ export class AnimationTestScene extends Phaser.Scene {
     this.slashArcSprite = this.add.image(posX, posY, key)
       .setOrigin(originX, originY)
       .setScale(scaleXVal * mult, scaleYVal * mult)
-      .setDepth(11); // Layer 3: slash down arc (renders above player sprite @ depth 10)
+      .setDepth(11); // Layer 3: slash down arc (above player sprite @ depth 10)
+
+    // Hide/destroy slash arc after 120 ms
+    this.slashArcTimer = this.time.delayedCall(120, () => {
+      this.cleanupSlashArc();
+    });
   }
 
   /** Spawn visual spark sequence centered on deflect contactPoint with visible-bounds anchors. */
@@ -519,6 +531,17 @@ export class AnimationTestScene extends Phaser.Scene {
       console.warn('[AnimationTestScene] Spark textures missing');
       return;
     }
+
+    // Destroy existing spark sprite before creating new sequence
+    if (this.sparkSprite) {
+      this.sparkSprite.destroy();
+      this.sparkSprite = null;
+    }
+
+    // Cancel old timers
+    if (this.sparkTimer1) { this.sparkTimer1.remove(false); this.sparkTimer1 = null; }
+    if (this.sparkTimer2) { this.sparkTimer2.remove(false); this.sparkTimer2 = null; }
+    if (this.sparkTimer3) { this.sparkTimer3.remove(false); this.sparkTimer3 = null; }
 
     const playerSprite = this.player.sprite;
     const scaleXVal = (playerSprite.scaleX || 1.0) * sparkScaleMultiplier;
@@ -535,7 +558,7 @@ export class AnimationTestScene extends Phaser.Scene {
     this.sparkFrameName = 'spark_01';
 
     // Spark 01: 45 ms -> Spark 02
-    this.time.delayedCall(45, () => {
+    this.sparkTimer1 = this.time.delayedCall(45, () => {
       if (this.sparkSprite) {
         this.sparkSprite.setTexture('effect_deflect_spark_02');
         const anchor02 = this.registry.get('spark_anchor_02') || { x: 0.5, y: 0.5 };
@@ -545,7 +568,7 @@ export class AnimationTestScene extends Phaser.Scene {
     });
 
     // Spark 02: 45 + 60 = 105 ms -> Spark 03
-    this.time.delayedCall(105, () => {
+    this.sparkTimer2 = this.time.delayedCall(105, () => {
       if (this.sparkSprite) {
         this.sparkSprite.setTexture('effect_deflect_spark_03');
         const anchor03 = this.registry.get('spark_anchor_03') || { x: 0.5, y: 0.5 };
@@ -555,13 +578,24 @@ export class AnimationTestScene extends Phaser.Scene {
     });
 
     // Spark 03: 105 + 55 = 160 ms -> Destroy
-    this.time.delayedCall(160, () => {
+    this.sparkTimer3 = this.time.delayedCall(160, () => {
       if (this.sparkSprite) {
         this.sparkSprite.destroy();
         this.sparkSprite = null;
         this.sparkFrameName = 'NONE';
       }
     });
+  }
+
+  private cleanupSlashArc(): void {
+    if (this.slashArcSprite) {
+      this.slashArcSprite.destroy();
+      this.slashArcSprite = null;
+    }
+    if (this.slashArcTimer) {
+      this.slashArcTimer.remove(false);
+      this.slashArcTimer = null;
+    }
   }
 
   private buildUI(): void {
@@ -654,13 +688,14 @@ export class AnimationTestScene extends Phaser.Scene {
   private handleKeyboardInputs(): void {
     // ESC -> Return to MainMenuScene
     if (Phaser.Input.Keyboard.JustDown(this.keyEsc)) {
+      this.clearTemporaryEffects();
       this.scene.start('MainMenuScene');
       return;
     }
 
     // R -> Reset to Idle
     if (Phaser.Input.Keyboard.JustDown(this.keyR)) {
-      this.cleanupDemoOnly();
+      this.clearTemporaryEffects();
       this.player.playIdle();
       this.showMessage('Animation Reset', '#ffffff');
       return;
@@ -670,7 +705,7 @@ export class AnimationTestScene extends Phaser.Scene {
 
     // 1 -> Idle
     if (Phaser.Input.Keyboard.JustDown(this.key1)) {
-      this.cleanupDemoOnly();
+      this.clearTemporaryEffects();
       this.player.playIdle();
       this.showMessage('Playing Idle animation', '#00ccff');
       return;
@@ -897,6 +932,12 @@ export class AnimationTestScene extends Phaser.Scene {
 
     const timingStr = this.deflectMode === 'UP' ? 'STANDARD' : 'FAST';
 
+    // Redirect status
+    let redirectStr = 'NONE';
+    if (this.redirectedBlaster) {
+      redirectStr = this.deflectMode === 'UP' ? 'UP_RIGHT' : 'DOWN_RIGHT';
+    }
+
     // Format shorter side-by-side variables to prevent overflow inside smaller card
     let textLines: string[] = [];
 
@@ -909,11 +950,12 @@ export class AnimationTestScene extends Phaser.Scene {
         `Spark : ${this.sparkFrameName} | Active : ${activeText}`,
         `Contact: ${contactText}      | Chain  : ${exitText}`,
         `Slash Arc: ${slashArcText}   | Textures: ${texturesStatus}`,
+        `Arc Visible: ${this.slashArcSprite ? 'yes' : 'no'} | Arc Type: UP`,
+        `Arc Timer: ${this.slashArcTimer ? 'active' : 'none'} | Redirect: ${redirectStr}`,
         `Up Contact: (${Math.floor(contact.x)},${Math.floor(contact.y)})`,
         `Up Arc: Pos=(${Math.floor(this.slashArcSprite ? this.slashArcSprite.x : 0)},${Math.floor(this.slashArcSprite ? this.slashArcSprite.y : 0)}) Offset=${slashOffset}`,
-        `Up Spark: Pos=(${Math.floor(sparkXVal)},${Math.floor(sparkYVal)}) Offset=${currentSparkOffset}`,
-        `Up Blaster Target: (${Math.floor(contact.x + SPARK_CONTACT_OFFSET_X)},${Math.floor(contact.y + SPARK_CONTACT_OFFSET_Y)})`,
-        `Mode  : UP               | Timing : ${timingStr}`
+        `Up Spark: Pos=(${Math.floor(sparkXVal)},${Math.floor(sparkYVal)})`,
+        `Up Blaster Target: (${Math.floor(contact.x + SPARK_CONTACT_OFFSET_X)},${Math.floor(contact.y + SPARK_CONTACT_OFFSET_Y)})`
       ];
     } else {
       textLines = [
@@ -924,12 +966,12 @@ export class AnimationTestScene extends Phaser.Scene {
         `Spark : ${this.sparkFrameName} | Active : ${activeText}`,
         `Contact: ${contactText}      | Chain  : ${exitText}`,
         `Slash Arc: ${slashArcText}   | Textures: ${texturesStatus}`,
+        `Arc Visible: ${this.slashArcSprite ? 'yes' : 'no'} | Arc Type: DOWN`,
+        `Arc Timer: ${this.slashArcTimer ? 'active' : 'none'} | Redirect: ${redirectStr}`,
         `Down Contact: (${Math.floor(contact.x)},${Math.floor(contact.y)})`,
         `Down Arc: Pos=(${Math.floor(this.slashArcSprite ? this.slashArcSprite.x : 0)},${Math.floor(this.slashArcSprite ? this.slashArcSprite.y : 0)})`,
         `Down Spark: Pos=(${Math.floor(sparkXVal)},${Math.floor(sparkYVal)})`,
-        `Down Blaster Target: (${Math.floor(contact.x)},${Math.floor(contact.y)})`,
-        `Down Arc Offset: (${DEFLECT_DOWN_ARC_OFFSET_X},${DEFLECT_DOWN_ARC_OFFSET_Y})`,
-        `Down Contact Fine Tune: (${DEFLECT_DOWN_CONTACT_FINE_TUNE_X},${DEFLECT_DOWN_CONTACT_FINE_TUNE_Y})`
+        `Down Blaster Target: (${Math.floor(contact.x)},${Math.floor(contact.y)})`
       ];
     }
 
@@ -958,10 +1000,7 @@ export class AnimationTestScene extends Phaser.Scene {
     this.messageTimer = 1800; // visible for 1.8s
   }
 
-  private cleanupDemoOnly(): void {
-    // Stop all tweens
-    this.tweens.killAll();
-
+  private clearTemporaryEffects(): void {
     // Destroy graphics and images
     if (this.testBlaster) {
       this.testBlaster.destroy();
@@ -971,10 +1010,7 @@ export class AnimationTestScene extends Phaser.Scene {
       this.redirectedBlaster.destroy();
       this.redirectedBlaster = null;
     }
-    if (this.slashArcSprite) {
-      this.slashArcSprite.destroy();
-      this.slashArcSprite = null;
-    }
+    this.cleanupSlashArc();
     if (this.sparkSprite) {
       this.sparkSprite.destroy();
       this.sparkSprite = null;
@@ -984,6 +1020,14 @@ export class AnimationTestScene extends Phaser.Scene {
       this.debugMarker = null;
     }
 
+    // Cancel all timers
+    if (this.sparkTimer1) { this.sparkTimer1.remove(false); this.sparkTimer1 = null; }
+    if (this.sparkTimer2) { this.sparkTimer2.remove(false); this.sparkTimer2 = null; }
+    if (this.sparkTimer3) { this.sparkTimer3.remove(false); this.sparkTimer3 = null; }
+
+    // Stop all tweens
+    this.tweens.killAll();
+
     this.demoActive = false;
     this.contactReached = false;
     this.blasterState = 'NONE';
@@ -992,7 +1036,7 @@ export class AnimationTestScene extends Phaser.Scene {
   }
 
   private cleanupDemo(): void {
-    this.cleanupDemoOnly();
+    this.clearTemporaryEffects();
     hideGameplayGifBackground();
   }
 }
