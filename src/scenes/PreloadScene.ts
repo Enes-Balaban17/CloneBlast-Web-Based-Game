@@ -285,6 +285,14 @@ export class PreloadScene extends Phaser.Scene {
     } else {
       console.warn('Missing slash arc down effect');
     }
+
+    if (this.textures.exists('effect_slash_arc_down')) {
+      const anchor = this.calculateVisibleBoundsCenter('effect_slash_arc_down');
+      if (anchor) {
+        this.registry.set('slash_arc_down_anchor', anchor);
+        console.log(`[PreloadScene] Stored slash_arc_down_anchor: x=${anchor.x.toFixed(4)}, y=${anchor.y.toFixed(4)}`);
+      }
+    }
   }
 
   private calculateVisibleBoundsCenter(textureKey: string): { x: number; y: number } | null {

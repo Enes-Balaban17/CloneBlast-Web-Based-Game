@@ -25,18 +25,19 @@ let sparkScaleMultiplier = 1.0;
 const DEFLECT_DOWN_CONTACT_NORM_X = 0.74;
 const DEFLECT_DOWN_CONTACT_NORM_Y = 0.56;
 
-let DEFLECT_DOWN_CONTACT_FINE_TUNE_X = 0;
-let DEFLECT_DOWN_CONTACT_FINE_TUNE_Y = 0;
+let DEFLECT_DOWN_CONTACT_FINE_TUNE_X = 45; // shifted more RIGHT
+let DEFLECT_DOWN_CONTACT_FINE_TUNE_Y = 32; // shifted more DOWN
 
-let DEFLECT_DOWN_ARC_OFFSET_X = 0;
+let DEFLECT_DOWN_ARC_OFFSET_X = 55; // moved more RIGHT
 let DEFLECT_DOWN_ARC_OFFSET_Y = 0;
 let DEFLECT_DOWN_ARC_SCALE = 1.0;
 
 let DEFLECT_DOWN_SPARK_OFFSET_X = 0;
 let DEFLECT_DOWN_SPARK_OFFSET_Y = 0;
 
-// Toggle for deflect contact point crosshair debug marker
+// Toggles for deflect contact point crosshair debug markers
 const SHOW_DEFLECT_UP_CONTACT_DEBUG = false;
+const SHOW_DEFLECT_DOWN_CONTACT_DEBUG = false;
 
 export class AnimationTestScene extends Phaser.Scene {
   private player!: Player;
@@ -187,20 +188,23 @@ export class AnimationTestScene extends Phaser.Scene {
       this.debugMarker = null;
     }
 
-    if (!SHOW_DEFLECT_UP_CONTACT_DEBUG) return;
-
+    let showDebug = false;
     let targetX = 0;
     let targetY = 0;
 
     if (this.deflectMode === 'UP') {
+      showDebug = SHOW_DEFLECT_UP_CONTACT_DEBUG;
       const contact = this.getDeflectUpSwordTipContactPoint();
       targetX = contact.x + SPARK_CONTACT_OFFSET_X;
       targetY = contact.y + SPARK_CONTACT_OFFSET_Y;
     } else {
+      showDebug = SHOW_DEFLECT_DOWN_CONTACT_DEBUG;
       const contact = this.getDeflectDownSwordContactPoint();
       targetX = contact.x + DEFLECT_DOWN_SPARK_OFFSET_X;
       targetY = contact.y + DEFLECT_DOWN_SPARK_OFFSET_Y;
     }
+
+    if (!showDebug) return;
 
     this.debugMarker = this.add.graphics();
     this.debugMarker.lineStyle(2, 0x00ff00, 1.0);
@@ -314,7 +318,7 @@ export class AnimationTestScene extends Phaser.Scene {
     const startY = targetY - 6;
     this.testBlaster.setPosition(GAME_WIDTH + 80, startY);
 
-    // Rotate bolt slightly down towards the contact point
+    // Rotate bolt down towards the contact point
     const dx = targetX - (GAME_WIDTH + 80);
     const dy = targetY - startY;
     const angleRad = Math.atan2(dy, dx);
@@ -324,7 +328,7 @@ export class AnimationTestScene extends Phaser.Scene {
       targets: this.testBlaster,
       x: targetX,
       y: targetY,
-      duration: 185,
+      duration: 185, // matches frame 05 startup for deflect up
     });
   }
 
@@ -372,16 +376,20 @@ export class AnimationTestScene extends Phaser.Scene {
     // 1. Play player deflect down animation
     this.player.playAction(
       'deflect_down',
-      // onActiveDeflect (frame 05 reached - ~185ms from start)
+      // onActiveDeflect (frame 05 reached - ~150ms from start)
       () => {
         this.contactReached = true;
         this.blasterState = 'CONTACT';
 
         // Calculate and store the target contact coordinates exactly once at the beginning of frame 05
         const contact = this.getDeflectDownSwordContactPoint();
-        const targetX = contact.x + DEFLECT_DOWN_SPARK_OFFSET_X;
-        const targetY = contact.y + DEFLECT_DOWN_SPARK_OFFSET_Y;
-        this.currentSparkContactPoint = { x: targetX, y: targetY };
+        const targetX = contact.x; // aims at contact point directly
+        const targetY = contact.y; 
+        
+        // Stored spark coordinate applies DEFLECT_DOWN_SPARK_OFFSET
+        const sparkX = targetX + DEFLECT_DOWN_SPARK_OFFSET_X;
+        const sparkY = targetY + DEFLECT_DOWN_SPARK_OFFSET_Y;
+        this.currentSparkContactPoint = { x: sparkX, y: sparkY };
 
         // Destroy incoming blaster
         if (this.testBlaster) {
@@ -395,7 +403,7 @@ export class AnimationTestScene extends Phaser.Scene {
         // Spawn visual Sparks animation centered on currentSparkContactPoint
         this.spawnSparkSequence(this.currentSparkContactPoint);
 
-        // Spawn visual redirected blaster bolt moving upward-right (lower deflection trajectory angle)
+        // Spawn visual redirected blaster bolt moving upward-right from the contact point
         this.blasterState = 'REDIRECTED';
         this.redirectedBlaster = this.add.graphics();
         this.redirectedBlaster.fillStyle(0xff3300, 1);
@@ -429,17 +437,17 @@ export class AnimationTestScene extends Phaser.Scene {
 
     // Get contact coordinates to compute path Y
     const contact = this.getDeflectDownSwordContactPoint();
-    const targetX = contact.x + DEFLECT_DOWN_SPARK_OFFSET_X;
-    const targetY = contact.y + DEFLECT_DOWN_SPARK_OFFSET_Y;
+    const targetX = contact.x;
+    const targetY = contact.y;
 
-    // 2. Spawn incoming red blaster bolt (starts lower at lower deflection contact Y - 6)
+    // 2. Spawn incoming red blaster bolt (starts higher at lower deflection contact Y)
     this.testBlaster = this.add.graphics();
     this.testBlaster.fillStyle(0xff2200, 1);
     this.testBlaster.fillRect(-30, -4, 60, 8);
     this.testBlaster.fillStyle(0xffaa00, 1);
     this.testBlaster.fillRect(-15, -2, 30, 4);
 
-    const startY = targetY - 6;
+    const startY = targetY; // comes horizontally at sword-tip height
     this.testBlaster.setPosition(GAME_WIDTH + 80, startY);
 
     // Rotate bolt down towards the contact point
@@ -452,7 +460,7 @@ export class AnimationTestScene extends Phaser.Scene {
       targets: this.testBlaster,
       x: targetX,
       y: targetY,
-      duration: 185,
+      duration: 150, // matches FAST frame 05 startup for deflect down (30 + 35 + 40 + 45 = 150 ms)
     });
   }
 
@@ -468,11 +476,6 @@ export class AnimationTestScene extends Phaser.Scene {
     const scaleXVal = this.player.sprite.scaleX || 1.0;
     const scaleYVal = this.player.sprite.scaleY || 1.0;
 
-    // Detect if the slash arc texture is full-canvas aligned or standalone cropped
-    const texture = this.textures.get(key);
-    const img = texture.getSourceImage() as HTMLImageElement | HTMLCanvasElement;
-    const isFullCanvas = img && img.width >= 900 && img.height >= 900;
-
     let posX = 0;
     let posY = 0;
     let originX = 0.5;
@@ -485,14 +488,17 @@ export class AnimationTestScene extends Phaser.Scene {
       mult = slashArcScaleMultiplier;
     } else {
       mult = DEFLECT_DOWN_ARC_SCALE;
-      if (isFullCanvas) {
-        posX = PLAYER_X + DEFLECT_DOWN_ARC_OFFSET_X;
-        posY = 860 + DEFLECT_DOWN_ARC_OFFSET_Y;
+      const contact = this.getDeflectDownSwordContactPoint();
+      posX = contact.x + DEFLECT_DOWN_ARC_OFFSET_X;
+      posY = contact.y + DEFLECT_DOWN_ARC_OFFSET_Y;
+
+      // Set visible-bounds origin for standalone arc down if scanned
+      const anchor = this.registry.get('slash_arc_down_anchor');
+      if (anchor) {
+        originX = anchor.x;
+        originY = anchor.y;
       } else {
-        const contact = this.getDeflectDownSwordContactPoint();
-        posX = contact.x + DEFLECT_DOWN_ARC_OFFSET_X;
-        posY = contact.y + DEFLECT_DOWN_ARC_OFFSET_Y;
-        originY = 0.5; // center origin for standalone arc
+        originY = 0.5;
       }
     }
 
@@ -600,7 +606,7 @@ export class AnimationTestScene extends Phaser.Scene {
     gfx.lineStyle(1, 0x334466, 0.5);
     gfx.lineBetween(cardX + 20, cardY + 220, cardX + cardW - 20, cardY + 220);
 
-    // Live state status text (Font size: 14px, Line spacing: 18px, compact dual column layout)
+    // Live state status text (Font size: 14px, Line spacing: 17px, compact dual column layout)
     this.statusText = this.add.text(cardX + 20, cardY + 233, '', {
       fontSize: '14px', fontFamily: FONT, color: '#ffffff', lineSpacing: 4
     });
@@ -846,7 +852,7 @@ export class AnimationTestScene extends Phaser.Scene {
     const slashArcText = this.slashArcSprite ? 'ON' : 'OFF';
 
     const hasEffects =
-      this.textures.exists('effect_slash_arc_up') &&
+      (this.deflectMode === 'UP' ? this.textures.exists('effect_slash_arc_up') : this.textures.exists('effect_slash_arc_down')) &&
       this.textures.exists('effect_deflect_spark_01') &&
       this.textures.exists('effect_deflect_spark_02') &&
       this.textures.exists('effect_deflect_spark_03');
@@ -872,7 +878,7 @@ export class AnimationTestScene extends Phaser.Scene {
       const targetX = contact.x + DEFLECT_DOWN_SPARK_OFFSET_X;
       const targetY = contact.y + DEFLECT_DOWN_SPARK_OFFSET_Y;
       slashOffset = `(${DEFLECT_DOWN_ARC_OFFSET_X},${DEFLECT_DOWN_ARC_OFFSET_Y})`;
-      startYVal = targetY - 6;
+      startYVal = targetY; // incoming is horizontal start Y = target Y
       sparkXVal = targetX;
       sparkYVal = targetY;
     }
@@ -892,6 +898,8 @@ export class AnimationTestScene extends Phaser.Scene {
       }
     }
 
+    const timingStr = this.deflectMode === 'UP' ? 'STANDARD' : 'FAST';
+
     // Format shorter side-by-side variables to prevent overflow inside smaller card
     const textLines = [
       `Action: ${action.toUpperCase()}`,
@@ -901,10 +909,11 @@ export class AnimationTestScene extends Phaser.Scene {
       `Spark : ${this.sparkFrameName} | Active : ${activeText}`,
       `Contact: ${contactText}      | Chain  : ${exitText}`,
       `Slash Arc: ${slashArcText}   | Textures: ${texturesStatus}`,
-      `Contact Point: X=${Math.floor(contact.x)} Y=${Math.floor(contact.y)}`,
-      `Blaster: StartY=${Math.floor(startYVal)} TargetY=${Math.floor(sparkYVal)}`,
-      `Spark: ${sparkMode} | Offset: ${currentSparkOffset}`,
-      `Deflect Mode: ${this.deflectMode}  | Arc Offset: ${slashOffset}`
+      `Mode  : DOWN (FAST)      | Timing : ${timingStr}`, // Show Mode details
+      `Contact: (${Math.floor(contact.x)},${Math.floor(contact.y)})`,
+      `Arc    : Pos=(${Math.floor(this.slashArcSprite ? this.slashArcSprite.x : 0)},${Math.floor(this.slashArcSprite ? this.slashArcSprite.y : 0)}) Offset=${slashOffset}`,
+      `Spark  : Pos=(${Math.floor(sparkXVal)},${Math.floor(sparkYVal)}) Offset=${currentSparkOffset}`,
+      `Blaster Target: (${Math.floor(this.deflectMode === 'UP' ? contact.x + SPARK_CONTACT_OFFSET_X : contact.x)},${Math.floor(this.deflectMode === 'UP' ? contact.y + SPARK_CONTACT_OFFSET_Y : contact.y)})`
     ];
 
     this.statusText.setText(textLines.join('\n'));

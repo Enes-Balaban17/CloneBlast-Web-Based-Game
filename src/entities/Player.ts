@@ -45,14 +45,14 @@ const DEFLECT_UP_SEQUENCE: DeflectUpFrameConfig[] = [
 ];
 
 const DEFLECT_DOWN_SEQUENCE: DeflectUpFrameConfig[] = [
-  { key: 'player_deflect_down_01', duration: 35 },
-  { key: 'player_deflect_down_02', duration: 45 },
-  { key: 'player_deflect_down_03', duration: 50 },
-  { key: 'player_deflect_down_04', duration: 55 },
-  { key: 'player_deflect_down_05', duration: 420, activeDeflect: true },
-  { key: 'player_deflect_down_06', duration: 65 },
-  { key: 'player_deflect_down_07', duration: 60, chainExit: true },
-  { key: 'player_deflect_down_08', duration: 50 },
+  { key: 'player_deflect_down_01', duration: 30 },
+  { key: 'player_deflect_down_02', duration: 35 },
+  { key: 'player_deflect_down_03', duration: 40 },
+  { key: 'player_deflect_down_04', duration: 45 },
+  { key: 'player_deflect_down_05', duration: 300, activeDeflect: true },
+  { key: 'player_deflect_down_06', duration: 45 },
+  { key: 'player_deflect_down_07', duration: 40, chainExit: true },
+  { key: 'player_deflect_down_08', duration: 35 },
 ];
 
 export class Player {
